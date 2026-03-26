@@ -156,16 +156,19 @@ with st.sidebar:
 
     # ユーザー追加ガイドライン（削除ボタン付き）
     for i, g in enumerate(custom_guidelines):
-        col_check, col_del = st.columns([10, 1])
-        with col_check:
-            st.checkbox(f"**{g['title']}**", value=False, key=f"custom_{i}_{g['title']}")
-        with col_del:
-            if st.button("✕", key=f"del_{i}", help="削除"):
-                custom_guidelines.pop(i)
-                save_custom_guidelines(custom_guidelines)
-                st.rerun()
-        if g.get("desc"):
-            st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{g['desc']}</p>", unsafe_allow_html=True)
+        st.checkbox(f"**{g['title']}**", value=False, key=f"custom_{i}_{g['title']}")
+        desc_text = g.get("desc", "")
+        # 補足説明 + 削除リンクを1行にまとめる
+        desc_part = f'<span style="color: #888;">{desc_text}</span>　' if desc_text else ""
+        st.markdown(
+            f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em;'>"
+            f"{desc_part}</p>",
+            unsafe_allow_html=True,
+        )
+        if st.button("削除", key=f"del_{i}", type="secondary"):
+            custom_guidelines.pop(i)
+            save_custom_guidelines(custom_guidelines)
+            st.rerun()
 
     # --- ガイドライン追加 ---
     st.markdown("---")
