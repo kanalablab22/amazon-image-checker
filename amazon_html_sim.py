@@ -130,33 +130,25 @@ def fetch_amazon_mobile_html(keyword: str, user_image: Image.Image, position: in
         user_b64 = base64.b64encode(buf.getvalue()).decode()
         user_data_url = f"data:image/jpeg;base64,{user_b64}"
 
-        # 商品画像のURLを差し替え（モバイル版はimages.amazonも含む）
-        img_patterns = [
-            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\.(?:jpg|png)',
-            r'https://images-na\.ssl-images-amazon\.com/images/I/[A-Za-z0-9+_.-]+\.(?:jpg|png)',
-            r'https://images-fe\.ssl-images-amazon\.com/images/I/[A-Za-z0-9+_.-]+\.(?:jpg|png)',
-        ]
-
-        all_img_matches = []
-        for pat in img_patterns:
-            all_img_matches.extend(re.finditer(pat, html))
-        # 出現順でソート
-        all_img_matches.sort(key=lambda m: m.start())
+        # imgタグのsrcから商品画像を探す（最も確実な方法）
+        img_srcs = re.findall(r'<img[^>]+src="(https://m\.media-amazon\.com/images/I/[^"]+\.jpg)"', html)
 
         seen_bases = set()
         product_count = 0
         target_base = None
 
-        for m in all_img_matches:
-            img_url = m.group(0)
-            base_match = re.search(r'/I/([A-Za-z0-9+_]+)', img_url)
+        for src_url in img_srcs:
+            base_match = re.search(r'/I/([A-Za-z0-9+_]+)', src_url)
             if not base_match:
                 continue
             base_id = base_match.group(1)
             if base_id in seen_bases:
                 continue
-            # ロゴやアイコンを除外（短すぎるID）
-            if len(base_id) < 8:
+            # ロゴやアイコンを除外
+            if len(base_id) < 10:
+                continue
+            # サムネイルサイズの画像だけカウント（SX148等）
+            if '_AC_SX' not in src_url and '_AC_SR' not in src_url and '_AC_SY' not in src_url:
                 continue
             seen_bases.add(base_id)
             product_count += 1
@@ -167,13 +159,11 @@ def fetch_amazon_mobile_html(keyword: str, user_image: Image.Image, position: in
 
         if target_base:
             # このベースIDを持つ全画像URLを差し替え
-            for pat in img_patterns:
-                domain_part = pat.split('/images/I/')[0].replace('\\', '')
-                html = re.sub(
-                    rf'{re.escape(domain_part)}/images/I/{re.escape(target_base)}[A-Za-z0-9._-]*\.(?:jpg|png)',
-                    user_data_url,
-                    html
-                )
+            html = re.sub(
+                rf'https://m\.media-amazon\.com/images/I/{re.escape(target_base)}[A-Za-z0-9._+-]*\.jpg',
+                user_data_url,
+                html
+            )
 
         # URL修正
         html = html.replace('href="/', 'href="https://www.amazon.co.jp/')
