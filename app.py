@@ -508,24 +508,7 @@ with st.spinner("Amazon検索結果を取得中..."):
             # モバイル版HTMLを取得して直接表示（iframe不使用）
             mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # iPhoneフレームのCSSを注入
-            phone_css = """
-            <style>
-                html, body { margin:0; padding:0; background:#fff !important; }
-                body {
-                    width: 300px !important;
-                    margin: 0 auto !important;
-                    border-left: 8px solid #333 !important;
-                    border-right: 8px solid #333 !important;
-                    border-radius: 40px !important;
-                    overflow-x: hidden !important;
-                    box-shadow: 0 5px 20px rgba(0,0,0,0.15) !important;
-                }
-            </style>
-            """
-            mobile_html = mobile_html.replace('</head>', phone_css + '</head>')
-
-            components.html(mobile_html, height=700, scrolling=True)
+            components.html(mobile_html, height=800, scrolling=True)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
