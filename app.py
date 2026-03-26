@@ -12,99 +12,92 @@ from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
 
-# --- カスタムガイドラインの永続化（GitHub API） ---
-GUIDELINES_PATH = "custom_guidelines.json"
+# --- カスタムデータの永続化（GitHub API / 汎用） ---
+import os
 
 def _github_headers():
-    """GitHub API用ヘッダー"""
     token = st.secrets.get("github", {}).get("token", "")
-    return {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
+    return {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
 
 def _github_repo():
     return st.secrets.get("github", {}).get("repo", "kanalablab22/amazon-image-checker")
 
 def _has_github_secrets() -> bool:
-    """GitHub secretsが設定されているか確認"""
     try:
-        token = st.secrets.get("github", {}).get("token", "")
-        return len(token) > 0
+        return len(st.secrets.get("github", {}).get("token", "")) > 0
     except Exception:
         return False
 
-def load_custom_guidelines() -> list:
-    """GitHubリポジトリからカスタムガイドラインを読み込む"""
-    if not _has_github_secrets():
-        return _load_local_guidelines()
-    try:
-        repo = _github_repo()
-        url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}?ref=data"
-        resp = requests.get(url, headers=_github_headers(), timeout=5)
-        if resp.status_code == 200:
-            content = base64.b64decode(resp.json()["content"]).decode("utf-8")
-            return json.loads(content)
-        else:
-            return _load_local_guidelines()
-    except Exception:
-        return _load_local_guidelines()
-
-def save_custom_guidelines(guidelines: list):
-    """GitHubリポジトリにカスタムガイドラインを保存"""
-    # ローカルにも常に保存（フォールバック）
-    _save_local_guidelines(guidelines)
-
-    if not _has_github_secrets():
-        return
-
-    try:
-        repo = _github_repo()
-        url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}"
-
-        # 既存ファイルのSHAを取得（更新時に必要）
-        sha = None
-        resp = requests.get(url + "?ref=data", headers=_github_headers(), timeout=5)
-        if resp.status_code == 200:
-            sha = resp.json()["sha"]
-
-        # ファイルを作成/更新
-        content = json.dumps(guidelines, ensure_ascii=False, indent=2)
-        data = {
-            "message": "ガイドライン更新",
-            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
-            "branch": "data",
-        }
-        if sha:
-            data["sha"] = sha
-
-        put_resp = requests.put(url, headers=_github_headers(), json=data, timeout=5)
-        if put_resp.status_code in (200, 201):
-            st.toast("✅ 保存しました", icon="✅")
-        else:
-            st.toast(f"⚠️ GitHub保存失敗（{put_resp.status_code}）ローカルには保存済み", icon="⚠️")
-    except Exception as e:
-        st.toast(f"⚠️ GitHub接続エラー。ローカルには保存済み", icon="⚠️")
-
-# --- ローカルファイルフォールバック ---
-import os
-_LOCAL_FILE = os.path.join(os.path.dirname(__file__), "custom_guidelines.json")
-
-def _load_local_guidelines() -> list:
-    if os.path.exists(_LOCAL_FILE):
+def _load_data(filename: str) -> list:
+    """GitHub（data branch）またはローカルからJSONリストを読み込む"""
+    if _has_github_secrets():
         try:
-            with open(_LOCAL_FILE, "r", encoding="utf-8") as f:
+            repo = _github_repo()
+            url = f"https://api.github.com/repos/{repo}/contents/{filename}?ref=data"
+            resp = requests.get(url, headers=_github_headers(), timeout=5)
+            if resp.status_code == 200:
+                content = base64.b64decode(resp.json()["content"]).decode("utf-8")
+                return json.loads(content)
+        except Exception:
+            pass
+    # ローカルフォールバック
+    local_path = os.path.join(os.path.dirname(__file__), filename)
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return []
 
-def _save_local_guidelines(guidelines: list):
+def _save_data(filename: str, data: list, commit_msg: str = "データ更新"):
+    """GitHub（data branch）+ ローカルにJSONリストを保存"""
+    # ローカル保存（常に）
+    local_path = os.path.join(os.path.dirname(__file__), filename)
     try:
-        with open(_LOCAL_FILE, "w", encoding="utf-8") as f:
-            json.dump(guidelines, f, ensure_ascii=False, indent=2)
+        with open(local_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+    if not _has_github_secrets():
+        return
+    try:
+        repo = _github_repo()
+        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        sha = None
+        resp = requests.get(url + "?ref=data", headers=_github_headers(), timeout=5)
+        if resp.status_code == 200:
+            sha = resp.json()["sha"]
+        payload = {
+            "message": commit_msg,
+            "content": base64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")).decode("ascii"),
+            "branch": "data",
+        }
+        if sha:
+            payload["sha"] = sha
+        put_resp = requests.put(url, headers=_github_headers(), json=payload, timeout=5)
+        if put_resp.status_code in (200, 201):
+            st.toast("✅ 保存しました", icon="✅")
+        else:
+            st.toast(f"⚠️ GitHub保存失敗（{put_resp.status_code}）", icon="⚠️")
+    except Exception:
+        st.toast("⚠️ GitHub接続エラー。ローカルには保存済み", icon="⚠️")
+
+# 便利関数（既存コードとの互換性）
+def load_custom_guidelines() -> list:
+    return _load_data("custom_guidelines.json")
+
+def save_custom_guidelines(guidelines: list):
+    _save_data("custom_guidelines.json", guidelines, "ガイドライン更新")
+
+def load_examples(kind: str) -> list:
+    """OK例集 or NG例集を読み込む（kind = 'ok' or 'ng'）"""
+    return _load_data(f"examples_{kind}.json")
+
+def save_examples(kind: str, examples: list):
+    label = "OK例集" if kind == "ok" else "NG例集"
+    _save_data(f"examples_{kind}.json", examples, f"{label}更新")
 
 st.set_page_config(
     page_title="Amazon画像チェッカー",
@@ -184,6 +177,58 @@ with st.sidebar:
                 "desc": new_desc.strip() if new_desc.strip() else "",
             })
             save_custom_guidelines(custom_guidelines)
+            st.rerun()
+
+    # ===========================================
+    # ✅ OK例集
+    # ===========================================
+    st.markdown("---")
+    st.markdown("### ✅ OK例集")
+    st.caption("良い画像のポイントをチームで共有")
+
+    ok_examples = load_examples("ok")
+    for i, ex in enumerate(ok_examples):
+        st.markdown(f"**{i+1}. {ex['title']}**")
+        if ex.get("desc"):
+            st.markdown(f"<p style='margin-top: -10px; margin-bottom: 2px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
+        if st.button("削除", key=f"del_ok_{i}", type="secondary"):
+            ok_examples.pop(i)
+            save_examples("ok", ok_examples)
+            st.rerun()
+
+    with st.form("add_ok_form", clear_on_submit=True):
+        ok_title = st.text_input("OK例を追加", placeholder="例: 影が自然に入っていて立体的")
+        ok_desc = st.text_input("補足（任意）", placeholder="例: 左上からの光で高級感がある", key="ok_desc")
+        ok_submitted = st.form_submit_button("➕ 追加", type="primary")
+        if ok_submitted and ok_title.strip():
+            ok_examples.append({"title": ok_title.strip(), "desc": ok_desc.strip() if ok_desc.strip() else ""})
+            save_examples("ok", ok_examples)
+            st.rerun()
+
+    # ===========================================
+    # ❌ NG例集
+    # ===========================================
+    st.markdown("---")
+    st.markdown("### ❌ NG例集")
+    st.caption("よくある失敗パターンを共有")
+
+    ng_examples = load_examples("ng")
+    for i, ex in enumerate(ng_examples):
+        st.markdown(f"**{i+1}. {ex['title']}**")
+        if ex.get("desc"):
+            st.markdown(f"<p style='margin-top: -10px; margin-bottom: 2px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
+        if st.button("削除", key=f"del_ng_{i}", type="secondary"):
+            ng_examples.pop(i)
+            save_examples("ng", ng_examples)
+            st.rerun()
+
+    with st.form("add_ng_form", clear_on_submit=True):
+        ng_title = st.text_input("NG例を追加", placeholder="例: 商品が斜めに傾いている")
+        ng_desc = st.text_input("補足（任意）", placeholder="例: 撮影時の角度調整不足", key="ng_desc")
+        ng_submitted = st.form_submit_button("➕ 追加", type="primary")
+        if ng_submitted and ng_title.strip():
+            ng_examples.append({"title": ng_title.strip(), "desc": ng_desc.strip() if ng_desc.strip() else ""})
+            save_examples("ng", ng_examples)
             st.rerun()
 
 # --- メインエリア ---
