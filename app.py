@@ -26,8 +26,18 @@ def _github_headers():
 def _github_repo():
     return st.secrets.get("github", {}).get("repo", "kanalablab22/amazon-image-checker")
 
+def _has_github_secrets() -> bool:
+    """GitHub secretsが設定されているか確認"""
+    try:
+        token = st.secrets.get("github", {}).get("token", "")
+        return len(token) > 0
+    except Exception:
+        return False
+
 def load_custom_guidelines() -> list:
     """GitHubリポジトリからカスタムガイドラインを読み込む"""
+    if not _has_github_secrets():
+        return _load_local_guidelines()
     try:
         repo = _github_repo()
         url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}?ref=data"
@@ -35,12 +45,19 @@ def load_custom_guidelines() -> list:
         if resp.status_code == 200:
             content = base64.b64decode(resp.json()["content"]).decode("utf-8")
             return json.loads(content)
+        else:
+            return _load_local_guidelines()
     except Exception:
-        pass
-    return []
+        return _load_local_guidelines()
 
 def save_custom_guidelines(guidelines: list):
     """GitHubリポジトリにカスタムガイドラインを保存"""
+    # ローカルにも常に保存（フォールバック）
+    _save_local_guidelines(guidelines)
+
+    if not _has_github_secrets():
+        return
+
     try:
         repo = _github_repo()
         url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}"
@@ -61,9 +78,33 @@ def save_custom_guidelines(guidelines: list):
         if sha:
             data["sha"] = sha
 
-        requests.put(url, headers=_github_headers(), json=data, timeout=5)
+        put_resp = requests.put(url, headers=_github_headers(), json=data, timeout=5)
+        if put_resp.status_code in (200, 201):
+            st.toast("✅ 保存しました", icon="✅")
+        else:
+            st.toast(f"⚠️ GitHub保存失敗（{put_resp.status_code}）ローカルには保存済み", icon="⚠️")
     except Exception as e:
-        st.toast(f"⚠️ 保存エラー: {e}", icon="⚠️")
+        st.toast(f"⚠️ GitHub接続エラー。ローカルには保存済み", icon="⚠️")
+
+# --- ローカルファイルフォールバック ---
+import os
+_LOCAL_FILE = os.path.join(os.path.dirname(__file__), "custom_guidelines.json")
+
+def _load_local_guidelines() -> list:
+    if os.path.exists(_LOCAL_FILE):
+        try:
+            with open(_LOCAL_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def _save_local_guidelines(guidelines: list):
+    try:
+        with open(_LOCAL_FILE, "w", encoding="utf-8") as f:
+            json.dump(guidelines, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 st.set_page_config(
     page_title="Amazon画像チェッカー",
@@ -117,6 +158,8 @@ with st.sidebar:
 
     # --- ガイドライン追加・削除 ---
     st.markdown("---")
+    if not _has_github_secrets():
+        st.caption("⚠️ GitHub未接続（ローカル保存モード）")
     st.markdown("#### ➕ ガイドラインを追加")
     with st.form("add_guideline_form", clear_on_submit=True):
         new_title = st.text_input("チェック項目", placeholder="例: 背景に余計なものを入れない")
