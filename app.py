@@ -148,59 +148,52 @@ with st.sidebar:
         st.checkbox(g, value=False, key=g)
 
     st.divider()
-    st.markdown("## 🏢 社内ガイドライン")
+    with st.expander("🏢 **社内ガイドライン**", expanded=False):
+        default_guidelines = [
+            ("商品を大きく、白余白を最小限に", "色を濃く商品を大きくするのがCTR改善のコツ"),
+            ("陰影・鏡面で少しインパクトを出す", "ドロップシャドウや鏡面反射で高級感"),
+            ("暗くてどんよりしないよう明るさに注意", "検索結果のサムネイルで暗く見えないか要チェック"),
+            ("商品の一部が暗くなっていないか", "穴の中・隙間・パーツの裏側も明るく見えるように"),
+            ("斜めからの光で立体感を出す", "まっすぐなライトだと平面的に。左上からの自然光が理想"),
+            ("検索結果の中で相対的に目立つように", "競合の中で埋もれない画像づくり"),
+            ("質感と佇まいが伝わる画像にする", "CGをやめて実写の質感を重視"),
+            ("細部にこだわる", "光の感じ、立体感、木や布の質感を追求"),
+        ]
 
-    # デフォルトのガイドライン
-    default_guidelines = [
-        ("商品を大きく、白余白を最小限に", "色を濃く商品を大きくするのがCTR改善のコツ"),
-        ("陰影・鏡面で少しインパクトを出す", "ドロップシャドウや鏡面反射で高級感"),
-        ("暗くてどんよりしないよう明るさに注意", "検索結果のサムネイルで暗く見えないか要チェック"),
-        ("商品の一部が暗くなっていないか", "穴の中・隙間・パーツの裏側も明るく見えるように"),
-        ("斜めからの光で立体感を出す", "まっすぐなライトだと平面的に。左上からの自然光が理想"),
-        ("検索結果の中で相対的に目立つように", "競合の中で埋もれない画像づくり"),
-        ("質感と佇まいが伝わる画像にする", "CGをやめて実写の質感を重視"),
-        ("細部にこだわる", "光の感じ、立体感、木や布の質感を追求"),
-    ]
+        custom_guidelines = load_custom_guidelines()
 
-    # ユーザー追加ガイドラインをファイルから読み込み
-    custom_guidelines = load_custom_guidelines()
+        for title, desc in default_guidelines:
+            st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
+            st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
 
-    # デフォルト（固定）ガイドラインを表示
-    for title, desc in default_guidelines:
-        st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
-        st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
+        for i, g in enumerate(custom_guidelines):
+            st.checkbox(f"**{g['title']}**", value=False, key=f"custom_{i}_{g['title']}")
+            desc_text = g.get("desc", "")
+            desc_part = f'<span style="color: #888;">{desc_text}</span>　' if desc_text else ""
+            st.markdown(
+                f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em;'>"
+                f"{desc_part}</p>",
+                unsafe_allow_html=True,
+            )
+            if st.button("削除", key=f"del_{i}", type="secondary"):
+                custom_guidelines.pop(i)
+                save_custom_guidelines(custom_guidelines)
+                st.rerun()
 
-    # ユーザー追加ガイドライン（削除ボタン付き）
-    for i, g in enumerate(custom_guidelines):
-        st.checkbox(f"**{g['title']}**", value=False, key=f"custom_{i}_{g['title']}")
-        desc_text = g.get("desc", "")
-        # 補足説明 + 削除リンクを1行にまとめる
-        desc_part = f'<span style="color: #888;">{desc_text}</span>　' if desc_text else ""
-        st.markdown(
-            f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em;'>"
-            f"{desc_part}</p>",
-            unsafe_allow_html=True,
-        )
-        if st.button("削除", key=f"del_{i}", type="secondary"):
-            custom_guidelines.pop(i)
-            save_custom_guidelines(custom_guidelines)
-            st.rerun()
-
-    # --- ガイドライン追加 ---
-    st.markdown("---")
-    if not _has_github_secrets():
-        st.caption("⚠️ GitHub未接続（ローカル保存モード）")
-    with st.form("add_guideline_form", clear_on_submit=True):
-        new_title = st.text_input("チェック項目を追加", placeholder="例: 背景に余計なものを入れない")
-        new_desc = st.text_input("補足説明（任意）", placeholder="例: 商品以外の小道具やテキストはNG")
-        submitted = st.form_submit_button("➕ 追加", type="primary")
-        if submitted and new_title.strip():
-            custom_guidelines.append({
-                "title": new_title.strip(),
-                "desc": new_desc.strip() if new_desc.strip() else "",
-            })
-            save_custom_guidelines(custom_guidelines)
-            st.rerun()
+        st.markdown("---")
+        if not _has_github_secrets():
+            st.caption("⚠️ GitHub未接続（ローカル保存モード）")
+        with st.form("add_guideline_form", clear_on_submit=True):
+            new_title = st.text_input("チェック項目を追加", placeholder="例: 背景に余計なものを入れない")
+            new_desc = st.text_input("補足説明（任意）", placeholder="例: 商品以外の小道具やテキストはNG")
+            submitted = st.form_submit_button("➕ 追加", type="primary")
+            if submitted and new_title.strip():
+                custom_guidelines.append({
+                    "title": new_title.strip(),
+                    "desc": new_desc.strip() if new_desc.strip() else "",
+                })
+                save_custom_guidelines(custom_guidelines)
+                st.rerun()
 
     # ===========================================
     # ブランド一覧（ブランドも追加可能に）
