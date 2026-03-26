@@ -255,7 +255,7 @@ def create_search_simulation(
 ) -> Image.Image:
     """PC版（4列）の検索結果シミュレーション"""
     if competitor_images is None:
-        competitor_images = fetch_amazon_thumbnails(keyword, count=9)
+        competitor_images = fetch_amazon_thumbnails(keyword, count=14)
 
     all_items = list(competitor_images)
     insert_idx = min(position - 1, len(all_items))
