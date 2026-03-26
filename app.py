@@ -512,6 +512,14 @@ with st.spinner("Amazon検索結果を取得中..."):
             <style>
                 html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
                 *, *::before, *::after { box-sizing:border-box !important; }
+                /* 検索結果を2列に強制 */
+                .s-main-slot { display:flex !important; flex-wrap:wrap !important; }
+                .s-main-slot > div[data-component-type="s-search-result"] {
+                    width:50% !important; flex:0 0 50% !important;
+                }
+                .s-main-slot > div:not([data-component-type="s-search-result"]) {
+                    width:100% !important; flex:0 0 100% !important;
+                }
             </style>
             """
             amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
