@@ -257,7 +257,7 @@ for i, report in enumerate(reports):
 
     # 左: 画像（bbox赤枠付き）
     with col_img:
-        st.image(report.annotated_image, caption=f"{report.filename} ({report.width}x{report.height}px)", use_container_width=True)
+        st.image(report.annotated_image, caption=f"{report.filename} ({report.width}x{report.height}px)", width="100%")
 
     # 右: チェック結果
     with col_result:
