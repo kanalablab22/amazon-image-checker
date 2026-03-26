@@ -361,6 +361,290 @@ def check_aspect_ratio(image: Image.Image) -> CheckResult:
     )
 
 
+def check_texture_quality(image: Image.Image, mask: np.ndarray) -> CheckResult:
+    """
+    チェック7: 素材の質感
+    商品部分のテクスチャ（局所的なコントラストの豊かさ）を測定。
+    標準偏差が低い = のっぺりしてて質感が伝わらない
+    """
+    arr = np.array(image.convert("L"))  # グレースケール
+
+    if not np.any(mask):
+        return CheckResult(name="質感", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    product_pixels = arr[mask]
+    # 商品部分の輝度の標準偏差 = テクスチャの豊かさ
+    texture_std = float(np.std(product_pixels))
+
+    # 局所コントラストも計算（5x5ブロックの標準偏差の平均）
+    h, w = arr.shape
+    block_size = 5
+    local_stds = []
+    product_arr = arr.copy().astype(float)
+    product_arr[~mask] = np.nan
+
+    for y in range(0, h - block_size, block_size * 2):
+        for x in range(0, w - block_size, block_size * 2):
+            block = product_arr[y:y+block_size, x:x+block_size]
+            valid = block[~np.isnan(block)]
+            if len(valid) > block_size * block_size // 2:
+                local_stds.append(float(np.std(valid)))
+
+    local_contrast = float(np.mean(local_stds)) if local_stds else 0
+
+    if texture_std > 40 and local_contrast > 10:
+        level = "ok"
+        detail = "素材の質感がしっかり表現されています"
+    elif texture_std > 25 or local_contrast > 7:
+        level = "warn"
+        detail = "質感がやや弱めです。ライティングや解像度を見直すとより魅力的になります"
+    else:
+        level = "ng"
+        detail = "のっぺりして質感が伝わりにくいです。撮影の光の当て方やコントラストを改善しましょう"
+
+    return CheckResult(
+        name="質感",
+        passed=level != "ng",
+        value=f"テクスチャ値 {texture_std:.0f}",
+        detail=detail,
+        level=level,
+    )
+
+
+def check_depth(image: Image.Image, mask: np.ndarray) -> CheckResult:
+    """
+    チェック8: 立体感
+    商品部分の明暗の幅（ダイナミックレンジ）で立体感を評価。
+    ハイライトとシャドウの差が大きい = 立体的に見える
+    """
+    arr = np.array(image.convert("L"))
+
+    if not np.any(mask):
+        return CheckResult(name="立体感", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    product_pixels = arr[mask].astype(float)
+
+    # 上位5%と下位5%の輝度差
+    high = float(np.percentile(product_pixels, 95))
+    low = float(np.percentile(product_pixels, 5))
+    dynamic_range = high - low
+
+    # ヒストグラムの分散（広く分布しているか）
+    hist_std = float(np.std(product_pixels))
+
+    if dynamic_range > 100 and hist_std > 35:
+        level = "ok"
+        detail = "明暗のコントラストが豊かで、立体感があります"
+    elif dynamic_range > 60 or hist_std > 25:
+        level = "warn"
+        detail = "やや立体感が弱めです。ライティングを工夫すると改善できます"
+    else:
+        level = "ng"
+        detail = "フラットな印象で立体感が不足しています。光の当て方にメリハリをつけましょう"
+
+    return CheckResult(
+        name="立体感",
+        passed=level != "ng",
+        value=f"明暗差 {dynamic_range:.0f}",
+        detail=detail,
+        level=level,
+    )
+
+
+def check_composition(image: Image.Image, mask: np.ndarray, bbox: tuple) -> CheckResult:
+    """
+    チェック9: 構図（傾き）
+    商品の外接矩形の傾きを検出。大きく傾いていたらNG。
+    商品の重心が画像中央付近にあるかもチェック。
+    """
+    h, w = image.height, image.width
+
+    if not np.any(mask):
+        return CheckResult(name="構図", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    # 商品の重心を計算
+    ys, xs = np.where(mask)
+    center_y = float(np.mean(ys))
+    center_x = float(np.mean(xs))
+
+    # 画像中央からのずれ
+    offset_x = abs(center_x - w / 2) / (w / 2)  # 0〜1
+    offset_y = abs(center_y - h / 2) / (h / 2)  # 0〜1
+
+    # 商品の主軸の傾きを推定（慣性モーメント）
+    ys_centered = ys - center_y
+    xs_centered = xs - center_x
+
+    # 共分散行列から主軸角度を計算
+    cov_xx = float(np.mean(xs_centered ** 2))
+    cov_yy = float(np.mean(ys_centered ** 2))
+    cov_xy = float(np.mean(xs_centered * ys_centered))
+
+    # 主軸の角度（度）
+    angle = 0.5 * np.degrees(np.arctan2(2 * cov_xy, cov_xx - cov_yy))
+    # 0度 or 90度に近ければまっすぐ
+    tilt = min(abs(angle), abs(abs(angle) - 90), abs(abs(angle) - 180))
+
+    issues = []
+    level = "ok"
+
+    if tilt > 15:
+        issues.append(f"商品が約{tilt:.0f}°傾いています")
+        level = "ng"
+    elif tilt > 8:
+        issues.append(f"わずかに傾いています（約{tilt:.0f}°）")
+        if level == "ok":
+            level = "warn"
+
+    if offset_x > 0.25 or offset_y > 0.25:
+        issues.append("商品が中央からずれています")
+        if level == "ok":
+            level = "warn"
+
+    if not issues:
+        detail = "商品がまっすぐ中央に配置されています"
+    else:
+        detail = "。".join(issues)
+
+    return CheckResult(
+        name="構図",
+        passed=level != "ng",
+        value=f"傾き {tilt:.1f}°",
+        detail=detail,
+        level=level,
+    )
+
+
+def check_edge_sharpness(image: Image.Image, mask: np.ndarray) -> CheckResult:
+    """
+    チェック10: エッジの鮮明度
+    ラプラシアン（二次微分）の分散でボケ具合を測定。
+    値が低い = ぼやけている、高い = くっきり
+    """
+    arr = np.array(image.convert("L")).astype(float)
+
+    if not np.any(mask):
+        return CheckResult(name="鮮明度", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    # ラプラシアンフィルタ（エッジ検出）
+    # [[0,1,0],[1,-4,1],[0,1,0]]
+    h, w = arr.shape
+    laplacian = np.zeros_like(arr)
+    laplacian[1:-1, 1:-1] = (
+        arr[:-2, 1:-1] + arr[2:, 1:-1] +
+        arr[1:-1, :-2] + arr[1:-1, 2:] -
+        4 * arr[1:-1, 1:-1]
+    )
+
+    # 商品部分のみのラプラシアン分散
+    product_laplacian = laplacian[mask]
+    sharpness = float(np.var(product_laplacian))
+
+    # 商品の縁付近のシャープネスも重視（numpy手動膨張・収縮）
+    try:
+        # 簡易膨張・収縮でエッジ領域を抽出
+        kernel = 3
+        dilated = np.zeros_like(mask)
+        eroded = np.ones_like(mask)
+        for dy in range(-kernel, kernel + 1):
+            for dx in range(-kernel, kernel + 1):
+                shifted = np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
+                dilated |= shifted
+                eroded &= shifted
+        edge_region = dilated & ~eroded
+        if np.any(edge_region):
+            edge_sharpness = float(np.var(laplacian[edge_region]))
+        else:
+            edge_sharpness = sharpness
+    except Exception:
+        edge_sharpness = sharpness
+
+    avg_sharpness = (sharpness + edge_sharpness) / 2
+
+    if avg_sharpness > 500:
+        level = "ok"
+        detail = "商品の輪郭・細部がくっきり鮮明です"
+    elif avg_sharpness > 200:
+        level = "warn"
+        detail = "やや甘い部分があります。解像度やピントを確認してみてください"
+    else:
+        level = "ng"
+        detail = "全体的にぼやけています。高解像度の元画像を使うか、シャープネスを調整しましょう"
+
+    return CheckResult(
+        name="鮮明度",
+        passed=level != "ng",
+        value=f"シャープネス {avg_sharpness:.0f}",
+        detail=detail,
+        level=level,
+    )
+
+
+def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
+    """
+    チェック11: 色味・色の自然さ
+    商品部分の彩度と色温度をチェック。
+    くすんだ色やどんよりした色味はNG。
+    """
+    arr = np.array(image.convert("RGB"))
+
+    if not np.any(mask):
+        return CheckResult(name="色味", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    product_pixels = arr[mask].astype(float)
+    r = product_pixels[:, 0]
+    g = product_pixels[:, 1]
+    b = product_pixels[:, 2]
+
+    # 彩度の指標: RGB間の差が大きいほど鮮やか
+    max_rgb = np.maximum(np.maximum(r, g), b)
+    min_rgb = np.minimum(np.minimum(r, g), b)
+    saturation = max_rgb - min_rgb
+    avg_saturation = float(np.mean(saturation))
+
+    # 色温度の指標: R-B差（正=暖色、負=寒色）
+    warmth = float(np.mean(r - b))
+
+    # 全体的なくすみ: 彩度が低く輝度も中間だとくすんで見える
+    avg_brightness = float(np.mean(max_rgb))
+
+    issues = []
+    level = "ok"
+
+    if avg_saturation < 15 and avg_brightness < 200:
+        issues.append("色がくすんでいます。彩度を上げるとより魅力的になります")
+        level = "ng"
+    elif avg_saturation < 25 and avg_brightness < 200:
+        issues.append("やや色味が弱いです")
+        if level == "ok":
+            level = "warn"
+
+    if warmth < -20:
+        issues.append("青みが強く冷たい印象です。暖色寄りに調整すると商品が映えます")
+        if level == "ok":
+            level = "warn"
+
+    if not issues:
+        detail = "色味が自然で魅力的です"
+        if warmth > 10:
+            detail += "（暖色系で好印象）"
+    else:
+        detail = "。".join(issues)
+
+    return CheckResult(
+        name="色味",
+        passed=level != "ng",
+        value=f"彩度 {avg_saturation:.0f} / 色温度 {warmth:+.0f}",
+        detail=detail,
+        level=level,
+    )
+
+
 def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
     """商品bboxに赤枠を描画した画像を作成"""
     annotated = image.copy().convert("RGB")
@@ -416,6 +700,22 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
 
     # 6. アスペクト比
     results.append(check_aspect_ratio(image))
+
+    # --- 社内品質チェック ---
+    # 7. 質感
+    results.append(check_texture_quality(image, mask))
+
+    # 8. 立体感
+    results.append(check_depth(image, mask))
+
+    # 9. 構図（傾き）
+    results.append(check_composition(image, mask, bbox))
+
+    # 10. エッジの鮮明度
+    results.append(check_edge_sharpness(image, mask))
+
+    # 11. 色味
+    results.append(check_color_tone(image, mask))
 
     # bbox赤枠付き画像
     annotated = _create_annotated_image(image, bbox)

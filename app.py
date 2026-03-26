@@ -93,35 +93,20 @@ if len(reports) > 1:
     st.markdown("---")
     st.markdown("## 📊 一括チェック結果")
 
-    summary_cols = st.columns([2, 1, 1, 1, 1])
-    summary_cols[0].markdown("**ファイル名**")
-    summary_cols[1].markdown("**面積比**")
-    summary_cols[2].markdown("**影**")
-    summary_cols[3].markdown("**サイズ**")
-    summary_cols[4].markdown("**総合**")
-
     for report in reports:
-        cols = st.columns([2, 1, 1, 1, 1])
-        cols[0].markdown(f"`{report.filename}`")
-
-        # 面積比
-        ratio_result = report.results[0]
-        icon = "✅" if ratio_result.level == "ok" else ("⚠️" if ratio_result.level == "warn" else "❌")
-        cols[1].markdown(f"{icon} {ratio_result.value}")
-
-        # 影
-        shadow_result = report.results[1]
-        icon = "✅" if shadow_result.passed else "❌"
-        cols[2].markdown(f"{icon} {shadow_result.value}")
-
-        # サイズ
-        size_result = report.results[2]
-        icon = "✅" if size_result.passed else "❌"
-        cols[3].markdown(f"{icon}")
-
-        # 総合
         all_passed = all(r.passed for r in report.results)
-        cols[4].markdown("✅ 合格" if all_passed else "❌ 要修正")
+        ng_count = sum(1 for r in report.results if r.level == "ng")
+        warn_count = sum(1 for r in report.results if r.level == "warn")
+
+        status = "✅ 合格" if all_passed else f"❌ NG {ng_count}件" if ng_count else f"⚠️ 注意 {warn_count}件"
+        st.markdown(f"**`{report.filename}`** → {status}")
+
+        # コンパクトに各チェック結果を表示
+        result_text = " | ".join([
+            f"{'✅' if r.level == 'ok' else ('⚠️' if r.level == 'warn' else '❌')}{r.name}"
+            for r in report.results
+        ])
+        st.caption(result_text)
 
     st.markdown("---")
 
