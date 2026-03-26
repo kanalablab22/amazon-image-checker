@@ -225,13 +225,15 @@ with st.sidebar:
             st.caption("まだ登録されていません")
         for i, ex in enumerate(filtered_ok):
             orig_idx = ok_examples.index(ex)
-            st.markdown(f"**・{ex['title']}**")
-            if ex.get("desc"):
-                st.markdown(f"<p style='margin-top: -10px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
-            if st.button("削除", key=f"del_ok_{orig_idx}", type="secondary"):
-                ok_examples.pop(orig_idx)
-                save_examples("ok", ok_examples)
-                st.rerun()
+            col_txt, col_del = st.columns([8, 1])
+            with col_txt:
+                desc_part = f' <span style="font-size:0.78em;color:#888;">— {ex["desc"]}</span>' if ex.get("desc") else ""
+                st.markdown(f"**・{ex['title']}**{desc_part}", unsafe_allow_html=True)
+            with col_del:
+                if st.button("🗑️", key=f"del_ok_{orig_idx}"):
+                    ok_examples.pop(orig_idx)
+                    save_examples("ok", ok_examples)
+                    st.rerun()
 
         st.markdown("---")
 
@@ -241,13 +243,15 @@ with st.sidebar:
             st.caption("まだ登録されていません")
         for i, ex in enumerate(filtered_ng):
             orig_idx = ng_examples.index(ex)
-            st.markdown(f"**・{ex['title']}**")
-            if ex.get("desc"):
-                st.markdown(f"<p style='margin-top: -10px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
-            if st.button("削除", key=f"del_ng_{orig_idx}", type="secondary"):
-                ng_examples.pop(orig_idx)
-                save_examples("ng", ng_examples)
-                st.rerun()
+            col_txt, col_del = st.columns([8, 1])
+            with col_txt:
+                desc_part = f' <span style="font-size:0.78em;color:#888;">— {ex["desc"]}</span>' if ex.get("desc") else ""
+                st.markdown(f"**・{ex['title']}**{desc_part}", unsafe_allow_html=True)
+            with col_del:
+                if st.button("🗑️", key=f"del_ng_{orig_idx}"):
+                    ng_examples.pop(orig_idx)
+                    save_examples("ng", ng_examples)
+                    st.rerun()
     else:
         st.caption("👆 ブランドを選ぶとOK例・NG例が表示されます")
 
