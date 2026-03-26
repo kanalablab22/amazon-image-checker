@@ -183,7 +183,13 @@ with st.sidebar:
     # ブランド一覧（ブランドも追加可能に）
     # ===========================================
     st.markdown("---")
-    DEFAULT_BRANDS = ["GRAV", "CAMP GREEB", "sopoa"]
+    DEFAULT_BRANDS = [
+        "GRAV", "CAMP GREEB", "sopoa",
+        "mura", "oeuf_soleil", "hugmotti", "shop_channel",
+        "hugmin", "riceking", "pin_eagle", "ponbaby",
+        "hacono", "kameto", "qp", "nocor",
+        "turfmate", "forest_pellet", "chotplus", "baby_potage",
+    ]
     custom_brands = _load_data("custom_brands.json")
     all_brands = DEFAULT_BRANDS + [b for b in custom_brands if b not in DEFAULT_BRANDS]
 
