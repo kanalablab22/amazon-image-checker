@@ -32,18 +32,23 @@ class ImageCheckReport:
 
     @staticmethod
     def calc_score(results: list) -> int:
-        """チェック結果から100点満点のスコアを算出"""
+        """チェック結果から100点満点のスコアを算出（厳しめ採点）"""
         if not results:
             return 0
         total = len(results)
         points = 0
+        ng_count = 0
         for r in results:
             if r.level == "ok":
                 points += 1.0
             elif r.level == "warn":
-                points += 0.5
-            # ng = 0
-        return round(points / total * 100)
+                points += 0.2  # 注意項目は厳しめ評価
+            else:
+                ng_count += 1
+        # NG項目が多いほどペナルティ加算
+        base = points / total * 100
+        penalty = ng_count * 5  # NG1件につき-5点の追加ペナルティ
+        return max(0, round(base - penalty))
 
 
 def _get_product_mask(image: Image.Image, threshold: int = 240) -> np.ndarray:
