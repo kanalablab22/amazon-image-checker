@@ -508,36 +508,22 @@ with st.spinner("Amazon検索結果を取得中..."):
             # モバイル版HTMLを取得
             mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # iPhoneフレームのCSSをHTML自体に注入
-            phone_frame_css = """
-            <style>
-                html { background: #1a1a1a !important; }
-                body {
-                    max-width: 284px !important;
-                    margin: 28px auto 20px !important;
-                    border-radius: 30px !important;
-                    overflow-x: hidden !important;
-                    background: #fff !important;
-                    position: relative !important;
-                }
-            </style>
-            """
-            mobile_html = mobile_html.replace('</head>', phone_frame_css + '</head>')
+            # 不要なCSS注入は削除（フレーム側で制御）
 
             # iPhoneフレーム外枠 + 中にモバイルHTMLを直接表示
             phone_wrapper = f'''
-            <div style="display:flex; justify-content:center;">
+            <div style="display:flex; justify-content:center; background:#fff;">
                 <div style="
                     width: 300px; height: 640px;
-                    border-radius: 45px; border: 8px solid #1a1a1a;
-                    background: #1a1a1a; position: relative;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                    border-radius: 45px; border: 8px solid #333;
+                    background: #333; position: relative;
+                    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
                     overflow: hidden;
                 ">
                     <div style="
                         position: absolute; top: 0; left: 50%; transform: translateX(-50%);
                         width: 120px; height: 28px;
-                        background: #1a1a1a; border-radius: 0 0 18px 18px; z-index: 10;
+                        background: #333; border-radius: 0 0 18px 18px; z-index: 10;
                     "></div>
                     <div style="
                         width: 100%; height: 100%;
