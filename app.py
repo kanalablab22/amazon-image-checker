@@ -388,7 +388,18 @@ for i, report in enumerate(reports):
 
     # スコア表示（カラー付き）
     score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
-    st.markdown(f"<h2 style='margin-bottom:0;'>総合スコア: <span style='color:{score_color};'>{score}点</span> / 100点 {'✅ 合格' if score >= 80 else '⚠️ 要改善'}</h2>", unsafe_allow_html=True)
+    label = "✅ 合格" if score >= 80 else "⚠️ 要改善"
+    bg = "#E8F5E9" if score >= 80 else ("#FFF3E0" if score >= 60 else "#FFEBEE")
+    border = "#4CAF50" if score >= 80 else ("#FF9800" if score >= 60 else "#F44336")
+    st.markdown(f"""
+    <div style="background:{bg}; border-left:5px solid {border}; border-radius:10px; padding:16px 22px; margin-bottom:12px;">
+        <span style="font-size:22px; font-weight:bold;">総合スコア:
+            <span style="color:{score_color}; font-size:32px;">{score}点</span>
+            <span style="font-size:18px; color:#666;"> / 100点</span>
+            <span style="font-size:20px; margin-left:8px;">{label}</span>
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     if all_ok:
         st.success("🎉 すべてのチェックをクリア！")
