@@ -255,13 +255,13 @@ def create_search_simulation(
 ) -> Image.Image:
     """PC版（4列）の検索結果シミュレーション"""
     if competitor_images is None:
-        competitor_images = fetch_amazon_thumbnails(keyword, count=7)
+        competitor_images = fetch_amazon_thumbnails(keyword, count=9)
 
     all_items = list(competitor_images)
     insert_idx = min(position - 1, len(all_items))
     all_items.insert(insert_idx, ("USER", user_image))
 
-    return _build_grid(keyword, all_items, cols=4, thumb_size=200)
+    return _build_grid(keyword, all_items, cols=5, thumb_size=180)
 
 
 def create_mobile_simulation(

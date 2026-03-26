@@ -470,7 +470,7 @@ with st.spinner("Amazon検索結果を取得中..."):
         uploaded_files[0].seek(0)
         user_img = Image.open(uploaded_files[0])
         # 競合画像を1回だけ取得してPC/スマホで共有
-        competitors = fetch_amazon_thumbnails(target_keyword, count=7)
+        competitors = fetch_amazon_thumbnails(target_keyword, count=9)
 
         col_pc, col_sp = st.columns([3, 2])
         with col_pc:
