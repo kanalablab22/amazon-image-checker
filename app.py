@@ -149,22 +149,32 @@ with st.sidebar:
     # ユーザー追加ガイドラインをファイルから読み込み
     custom_guidelines = load_custom_guidelines()
 
-    # デフォルト + ユーザー追加を統合表示
-    all_guidelines = default_guidelines + [(g["title"], g["desc"]) for g in custom_guidelines]
-
-    for title, desc in all_guidelines:
+    # デフォルト（固定）ガイドラインを表示
+    for title, desc in default_guidelines:
         st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
         st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
 
-    # --- ガイドライン追加・削除 ---
+    # ユーザー追加ガイドライン（削除ボタン付き）
+    for i, g in enumerate(custom_guidelines):
+        col_check, col_del = st.columns([10, 1])
+        with col_check:
+            st.checkbox(f"**{g['title']}**", value=False, key=f"custom_{i}_{g['title']}")
+        with col_del:
+            if st.button("✕", key=f"del_{i}", help="削除"):
+                custom_guidelines.pop(i)
+                save_custom_guidelines(custom_guidelines)
+                st.rerun()
+        if g.get("desc"):
+            st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{g['desc']}</p>", unsafe_allow_html=True)
+
+    # --- ガイドライン追加 ---
     st.markdown("---")
     if not _has_github_secrets():
         st.caption("⚠️ GitHub未接続（ローカル保存モード）")
-    st.markdown("#### ➕ ガイドラインを追加")
     with st.form("add_guideline_form", clear_on_submit=True):
-        new_title = st.text_input("チェック項目", placeholder="例: 背景に余計なものを入れない")
+        new_title = st.text_input("チェック項目を追加", placeholder="例: 背景に余計なものを入れない")
         new_desc = st.text_input("補足説明（任意）", placeholder="例: 商品以外の小道具やテキストはNG")
-        submitted = st.form_submit_button("追加する", type="primary")
+        submitted = st.form_submit_button("➕ 追加", type="primary")
         if submitted and new_title.strip():
             custom_guidelines.append({
                 "title": new_title.strip(),
@@ -172,19 +182,6 @@ with st.sidebar:
             })
             save_custom_guidelines(custom_guidelines)
             st.rerun()
-
-    # カスタムガイドラインの削除ボタン
-    if custom_guidelines:
-        st.markdown("#### 🗑️ 追加したガイドラインを削除")
-        for i, g in enumerate(custom_guidelines):
-            col_del_text, col_del_btn = st.columns([4, 1])
-            with col_del_text:
-                st.caption(g["title"])
-            with col_del_btn:
-                if st.button("✕", key=f"del_guide_{i}"):
-                    custom_guidelines.pop(i)
-                    save_custom_guidelines(custom_guidelines)
-                    st.rerun()
 
 # --- メインエリア ---
 st.markdown("# 🔍 Amazon商品画像チェッカー")
