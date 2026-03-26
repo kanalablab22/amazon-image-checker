@@ -414,7 +414,7 @@ for i, report in enumerate(reports):
             for ci, c in enumerate(file_comments):
                 col_comment, col_del = st.columns([20, 1])
                 with col_comment:
-                    st.markdown(f"<span style='font-size:0.9em;'>**{c.get('name', '匿名')}**: {c.get('text', '')}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:0.9em;'>{c.get('text', '')}</span>", unsafe_allow_html=True)
                 with col_del:
                     if st.button("×", key=f"del_comment_{i}_{ci}",
                                  help="削除",
@@ -425,12 +425,10 @@ for i, report in enumerate(reports):
                         st.rerun()
 
         with st.expander("💬 コメントを追加", expanded=False):
-            commenter = st.text_input("名前", key=f"commenter_{i}", placeholder="例: 田中")
             comment_text = st.text_area("コメント", key=f"comment_text_{i}", placeholder="例: 影をもう少し強くしたほうが良さそう", height=80)
             if st.button("💾 保存", key=f"save_comment_{i}"):
                 if comment_text.strip():
                     file_comments.append({
-                        "name": commenter.strip() or "匿名",
                         "text": comment_text.strip()
                     })
                     comments[file_key] = file_comments
