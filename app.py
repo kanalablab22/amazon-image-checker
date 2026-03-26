@@ -231,11 +231,11 @@ with st.sidebar:
             st.rerun()
 
     with st.form("add_ok_form", clear_on_submit=True):
-        ok_brand = st.selectbox("ブランド", all_brands, key="ok_brand")
+        ok_brand = st.selectbox("ブランド", ["（選択してください）"] + all_brands, key="ok_brand")
         ok_title = st.text_input("OK例を追加", placeholder="例: 影が自然に入っていて立体的")
         ok_desc = st.text_input("補足（任意）", placeholder="例: 左上からの光で高級感がある", key="ok_desc")
         ok_submitted = st.form_submit_button("➕ 追加", type="primary")
-        if ok_submitted and ok_title.strip():
+        if ok_submitted and ok_title.strip() and ok_brand != "（選択してください）":
             ok_examples.append({"title": ok_title.strip(), "desc": ok_desc.strip() if ok_desc.strip() else "", "brand": ok_brand})
             save_examples("ok", ok_examples)
             st.rerun()
@@ -264,11 +264,11 @@ with st.sidebar:
             st.rerun()
 
     with st.form("add_ng_form", clear_on_submit=True):
-        ng_brand = st.selectbox("ブランド", all_brands, key="ng_brand")
+        ng_brand = st.selectbox("ブランド", ["（選択してください）"] + all_brands, key="ng_brand")
         ng_title = st.text_input("NG例を追加", placeholder="例: 商品が斜めに傾いている")
         ng_desc = st.text_input("補足（任意）", placeholder="例: 撮影時の角度調整不足", key="ng_desc")
         ng_submitted = st.form_submit_button("➕ 追加", type="primary")
-        if ng_submitted and ng_title.strip():
+        if ng_submitted and ng_title.strip() and ng_brand != "（選択してください）":
             ng_examples.append({"title": ng_title.strip(), "desc": ng_desc.strip() if ng_desc.strip() else "", "brand": ng_brand})
             save_examples("ng", ng_examples)
             st.rerun()
