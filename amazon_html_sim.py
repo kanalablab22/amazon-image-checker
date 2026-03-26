@@ -165,12 +165,45 @@ def fetch_amazon_mobile_html(keyword: str, user_image: Image.Image, position: in
         html = html.replace("href='/", "href='https://www.amazon.co.jp/")
         html = html.replace('<a ', '<a onclick="return false;" ')
 
-        # モバイル用スタイル調整
+        # モバイル用スタイル調整（2列グリッド強制）
         style_inject = """
         <style>
-            body { margin: 0; padding: 0; overflow-x: hidden; font-size: 14px; }
+            body { margin: 0; padding: 0; overflow-x: hidden; font-size: 13px; }
             * { max-width: 100% !important; }
-            #nav-belt, #nav-main, .nav-footer, #rhf { display: none !important; }
+            #nav-belt, #nav-main, .nav-footer, #rhf,
+            .s-mobile-toolbar, #s-skipTo { display: none !important; }
+
+            /* 検索結果を2列グリッドに強制 */
+            .s-main-slot > .s-result-item,
+            .s-search-results > .s-result-item,
+            [data-component-type="s-search-result"] {
+                display: inline-block !important;
+                width: 48% !important;
+                vertical-align: top !important;
+                margin: 1% !important;
+                box-sizing: border-box !important;
+            }
+            .s-main-slot,
+            .s-search-results {
+                display: block !important;
+                font-size: 0 !important;
+            }
+            .s-main-slot > *,
+            .s-search-results > * {
+                font-size: 13px !important;
+            }
+            /* 商品画像を中央寄せ */
+            .s-image {
+                display: block !important;
+                margin: 0 auto !important;
+                max-height: 140px !important;
+                width: auto !important;
+            }
+            /* 広告バナーは全幅 */
+            .AdHolder, .s-result-item[data-component-type="sp-sponsored-result"] {
+                width: 100% !important;
+                display: block !important;
+            }
         </style>
         """
         html = html.replace('</head>', style_inject + '</head>')
