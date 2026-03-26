@@ -210,7 +210,7 @@ with st.sidebar:
     # ===========================================
     st.markdown("---")
     st.markdown("### ❌ NG例集")
-    st.caption("よくある失敗パターンを共有")
+    st.caption("NGパターンを共有")
 
     ng_examples = load_examples("ng")
     for i, ex in enumerate(ng_examples):
