@@ -505,54 +505,17 @@ with st.spinner("Amazon検索結果を取得中..."):
                 competitor_images=competitors,
             )
         with tab_sp:
-            # 実際のAmazon画像を使った2列グリッド（HTML自作）
-            def _img_to_b64(img):
-                buf = BytesIO()
-                img.convert("RGB").save(buf, format="JPEG", quality=85)
-                return base64.b64encode(buf.getvalue()).decode()
-
-            all_imgs = list(competitors[:9])
-            insert_pos = min(4, len(all_imgs))
-            all_imgs.insert(insert_pos, user_img)
-
-            cards = ""
-            for img in all_imgs:
-                b64 = _img_to_b64(img)
-                cards += f'''
-                <div style="border:1px solid #e3e3e3; border-radius:8px; padding:8px; background:#fff;">
-                    <img src="data:image/jpeg;base64,{b64}"
-                         style="width:100%; aspect-ratio:1; object-fit:contain; background:#fff; border-radius:4px;">
-                    <div style="margin-top:8px;">
-                        <div style="background:#e0e0e0; height:10px; width:90%; border-radius:3px; margin-bottom:5px;"></div>
-                        <div style="background:#e0e0e0; height:10px; width:65%; border-radius:3px; margin-bottom:8px;"></div>
-                        <div style="display:flex; align-items:baseline; gap:2px;">
-                            <span style="color:#0F1111; font-size:11px;">¥</span>
-                            <span style="color:#0F1111; font-size:20px; font-weight:bold;">X,XXX</span>
-                        </div>
-                        <div style="color:#CC0C39; font-size:11px; margin-top:2px;">XXポイント(1%)</div>
-                        <div style="margin-top:4px;">
-                            <span style="color:#DE7921; font-size:13px;">★★★★☆</span>
-                            <span style="color:#007185; font-size:12px;">(XXX)</span>
-                        </div>
-                        <div style="background:#FFD814; color:#0F1111; text-align:center; border-radius:20px; padding:8px; margin-top:8px; font-size:13px; font-weight:500;">
-                            カートに入れる
-                        </div>
-                    </div>
-                </div>'''
-
-            mobile_grid = f'''
-            <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#fff; padding:0; max-width:375px; margin:0 auto;">
-                <div style="background:#232F3E; padding:8px 10px;">
-                    <div style="background:#fff; border-radius:8px; padding:7px 12px; font-size:13px; color:#555;">
-                        🔍 {target_keyword}
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px;">
-                    {cards}
-                </div>
-            </div>'''
-
-            components.html(mobile_grid, height=700, scrolling=True)
+            # PC版と同じ実HTMLを375px幅で表示
+            amazon_html_sp = fetch_amazon_search_html(target_keyword, user_img, position=5)
+            # スマホ幅に制限するCSS追加
+            sp_css = """
+            <style>
+                html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
+                *, *::before, *::after { box-sizing:border-box !important; }
+            </style>
+            """
+            amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
+            components.html(amazon_html_sp, height=700, scrolling=True)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
