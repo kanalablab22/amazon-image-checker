@@ -153,71 +153,47 @@ def fetch_amazon_thumbnails(keyword: str, count: int = 8) -> list:
         return []
 
 
-def create_search_simulation(
+def _build_grid(
     keyword: str,
-    user_image: Image.Image,
-    position: int = 5,
-    competitor_images: list = None,
+    all_items: list,
+    cols: int = 4,
+    thumb_size: int = 200,
+    header_height: int = 70,
+    mobile: bool = False,
 ) -> Image.Image:
-    """
-    Amazon検索結果のシミュレーション画像を生成する
-
-    Args:
-        keyword: 検索キーワード
-        user_image: ユーザーの商品画像
-        position: ユーザー画像を挿入する位置（1-indexed）
-        competitor_images: 競合の画像リスト（Noneの場合は自動取得）
-
-    Returns: シミュレーション画像（PIL Image）
-    """
-    # 競合画像を取得
-    if competitor_images is None:
-        competitor_images = fetch_amazon_thumbnails(keyword, count=7)
-
-    # グリッドレイアウト設定
-    cols = 4
-    thumb_size = 200
-    padding = 15
-    header_height = 70
-    label_height = 25
+    """グリッドレイアウトの画像を生成する（PC/スマホ共通ロジック）"""
+    padding = 12 if mobile else 15
+    label_height = 20 if mobile else 25
     cell_w = thumb_size + padding * 2
     cell_h = thumb_size + padding * 2 + label_height
 
-    total_items = max(8, len(competitor_images) + 1)
+    total_items = max(cols * 2, len(all_items))
     rows = (total_items + cols - 1) // cols
 
     canvas_w = cols * cell_w + padding
     canvas_h = header_height + rows * cell_h + padding
 
-    # キャンバス作成（Amazon風の白背景）
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
     # ヘッダー（検索バー風）
     draw.rectangle([0, 0, canvas_w, header_height], fill=(35, 47, 62))
 
-    # 検索バー
     bar_x = padding
-    bar_y = 15
+    bar_y = (header_height - 36) // 2 if mobile else 15
     bar_w = canvas_w - padding * 2
-    bar_h = 40
+    bar_h = 32 if mobile else 40
     draw.rounded_rectangle(
         [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
         radius=8,
         fill=(255, 255, 255),
     )
 
-    # フォント（Noto Sans JP をダウンロード or フォールバック）
-    font_small = _get_japanese_font(14)
-    font_label = _get_japanese_font(11)
+    font_size = 11 if mobile else 14
+    font_small = _get_japanese_font(font_size)
+    font_label = _get_japanese_font(9 if mobile else 11)
 
-    draw.text((bar_x + 10, bar_y + 10), keyword, fill=(0, 0, 0), font=font_small)
-
-    # 画像を配置用リストに整列
-    all_items = list(competitor_images)
-    # position位置にユーザー画像を挿入（0-indexed で position-1）
-    insert_idx = min(position - 1, len(all_items))
-    all_items.insert(insert_idx, ("USER", user_image))
+    draw.text((bar_x + 8, bar_y + (bar_h - font_size) // 2), keyword, fill=(0, 0, 0), font=font_small)
 
     # グリッドに画像を配置
     for idx in range(min(total_items, len(all_items))):
@@ -225,42 +201,37 @@ def create_search_simulation(
         col = idx % cols
 
         x = padding + col * cell_w
-        y = header_height + 20 + row * cell_h
+        y = header_height + 10 + row * cell_h
 
         item = all_items[idx]
         is_user = isinstance(item, tuple) and item[0] == "USER"
+        img = item[1] if is_user else item
 
-        if is_user:
-            img = item[1]
-        else:
-            img = item
-
-        # 全商品同じ枠線（区別しない）
         draw.rectangle(
             [x, y, x + cell_w - padding, y + cell_h - 5],
             outline=(230, 230, 230),
             width=1,
         )
 
-        # 画像をリサイズしてセンタリング
         img_rgb = img.convert("RGB") if img.mode != "RGB" else img
         img_rgb.thumbnail((thumb_size - 10, thumb_size - 10), Image.Resampling.LANCZOS)
         paste_x = x + (cell_w - padding - img_rgb.width) // 2
         paste_y = y + (thumb_size - img_rgb.height) // 2 + padding // 2
         canvas.paste(img_rgb, (paste_x, paste_y))
 
-        # ダミー価格ライン（全商品共通）
+        # ダミー価格ライン
         price_y = y + cell_h - label_height - 5
-        draw.rectangle([x + 5, price_y + 2, x + 60, price_y + 4], fill=(200, 200, 200))
-        draw.rectangle([x + 5, price_y + 10, x + 100, price_y + 12], fill=(220, 220, 220))
+        line_w = min(55, cell_w // 3)
+        draw.rectangle([x + 5, price_y + 2, x + line_w, price_y + 4], fill=(200, 200, 200))
+        draw.rectangle([x + 5, price_y + 10, x + line_w + 30, price_y + 12], fill=(220, 220, 220))
 
-    # 競合が取得できなかった場合のプレースホルダー
+    # プレースホルダー
     if len(all_items) < total_items:
         for idx in range(len(all_items), total_items):
             row = idx // cols
             col = idx % cols
             x = padding + col * cell_w
-            y = header_height + 20 + row * cell_h
+            y = header_height + 10 + row * cell_h
             draw.rectangle(
                 [x + 5, y + 5, x + cell_w - padding - 5, y + thumb_size + padding],
                 fill=(245, 245, 245),
@@ -274,3 +245,37 @@ def create_search_simulation(
             )
 
     return canvas
+
+
+def create_search_simulation(
+    keyword: str,
+    user_image: Image.Image,
+    position: int = 5,
+    competitor_images: list = None,
+) -> Image.Image:
+    """PC版（4列）の検索結果シミュレーション"""
+    if competitor_images is None:
+        competitor_images = fetch_amazon_thumbnails(keyword, count=7)
+
+    all_items = list(competitor_images)
+    insert_idx = min(position - 1, len(all_items))
+    all_items.insert(insert_idx, ("USER", user_image))
+
+    return _build_grid(keyword, all_items, cols=4, thumb_size=200)
+
+
+def create_mobile_simulation(
+    keyword: str,
+    user_image: Image.Image,
+    position: int = 5,
+    competitor_images: list = None,
+) -> Image.Image:
+    """スマホ版（2列）の検索結果シミュレーション"""
+    if competitor_images is None:
+        competitor_images = fetch_amazon_thumbnails(keyword, count=5)
+
+    all_items = list(competitor_images)
+    insert_idx = min(position - 1, len(all_items))
+    all_items.insert(insert_idx, ("USER", user_image))
+
+    return _build_grid(keyword, all_items, cols=2, thumb_size=160, header_height=55, mobile=True)

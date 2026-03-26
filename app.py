@@ -11,7 +11,7 @@ from PIL import Image
 from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
-from amazon_search_sim import create_search_simulation
+from amazon_search_sim import create_search_simulation, create_mobile_simulation, fetch_amazon_thumbnails
 
 # --- カスタムデータの永続化（GitHub API / 汎用） ---
 import os
@@ -466,12 +466,30 @@ st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ")
 # 最初の画像を使ってシミュレーション
 with st.spinner("Amazon検索結果を取得中..."):
     try:
-        sim_image = create_search_simulation(
-            keyword=target_keyword,
-            user_image=Image.open(uploaded_files[0]),
-            position=5,
-        )
-        st.image(sim_image, use_column_width=True)
+        uploaded_files[0].seek(0)
+        user_img = Image.open(uploaded_files[0])
+        # 競合画像を1回だけ取得してPC/スマホで共有
+        competitors = fetch_amazon_thumbnails(target_keyword, count=7)
+
+        col_pc, col_sp = st.columns([3, 2])
+        with col_pc:
+            st.markdown("**🖥️ PC版**")
+            sim_pc = create_search_simulation(
+                keyword=target_keyword,
+                user_image=user_img,
+                position=5,
+                competitor_images=competitors,
+            )
+            st.image(sim_pc, use_column_width=True)
+        with col_sp:
+            st.markdown("**📱 スマホ版**")
+            sim_mobile = create_mobile_simulation(
+                keyword=target_keyword,
+                user_image=user_img,
+                position=5,
+                competitor_images=competitors[:5],
+            )
+            st.image(sim_mobile, use_column_width=True)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
