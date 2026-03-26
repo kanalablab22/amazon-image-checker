@@ -508,42 +508,44 @@ with st.spinner("Amazon検索結果を取得中..."):
             # モバイル版HTMLを取得
             mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # iPhoneフレームの中にiframeで実HTMLを表示
-            # srcdocでHTML全体を埋め込み
-            mobile_b64 = base64.b64encode(mobile_html.encode("utf-8")).decode("utf-8")
+            # iPhoneフレームのCSSをHTML自体に注入
+            phone_frame_css = """
+            <style>
+                html { background: #1a1a1a !important; }
+                body {
+                    max-width: 284px !important;
+                    margin: 28px auto 20px !important;
+                    border-radius: 30px !important;
+                    overflow-x: hidden !important;
+                    background: #fff !important;
+                    position: relative !important;
+                }
+            </style>
+            """
+            mobile_html = mobile_html.replace('</head>', phone_frame_css + '</head>')
 
-            phone_html = f'''
+            # iPhoneフレーム外枠 + 中にモバイルHTMLを直接表示
+            phone_wrapper = f'''
             <div style="display:flex; justify-content:center;">
                 <div style="
-                    width: 300px;
-                    height: 640px;
-                    border-radius: 45px;
-                    border: 8px solid #1a1a1a;
-                    background: #1a1a1a;
-                    position: relative;
+                    width: 300px; height: 640px;
+                    border-radius: 45px; border: 8px solid #1a1a1a;
+                    background: #1a1a1a; position: relative;
                     box-shadow: 0 10px 40px rgba(0,0,0,0.3);
                     overflow: hidden;
                 ">
-                    <!-- ノッチ -->
                     <div style="
                         position: absolute; top: 0; left: 50%; transform: translateX(-50%);
                         width: 120px; height: 28px;
                         background: #1a1a1a; border-radius: 0 0 18px 18px; z-index: 10;
                     "></div>
-                    <!-- 画面 -->
                     <div style="
                         width: 100%; height: 100%;
-                        border-radius: 37px;
-                        overflow: hidden;
-                        background: #fff;
+                        border-radius: 37px; overflow-y: auto;
+                        -webkit-overflow-scrolling: touch; background: #fff;
                     ">
-                        <iframe
-                            srcdoc='{mobile_html.replace(chr(39), "&#39;")}'
-                            style="width:100%; height:100%; border:none;"
-                            sandbox="allow-same-origin"
-                        ></iframe>
+                        {mobile_html}
                     </div>
-                    <!-- ホームバー -->
                     <div style="
                         position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
                         width:100px; height:4px; background:#666; border-radius:2px;
@@ -551,7 +553,7 @@ with st.spinner("Amazon検索結果を取得中..."):
                 </div>
             </div>'''
 
-            components.html(phone_html, height=680)
+            components.html(phone_wrapper, height=680)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
