@@ -367,6 +367,18 @@ for i, report in enumerate(reports):
     else:
         st.markdown("## 📸 チェック結果")
 
+    # 総合判定（一番上に表示）
+    all_ok = all(r.level == "ok" for r in report.results)
+    has_ng = any(r.level == "ng" for r in report.results)
+
+    if all_ok:
+        st.success("🎉 すべてのチェックをクリア！この画像はAmazon基準OKです")
+    elif has_ng:
+        ng_items = [r.name for r in report.results if r.level == "ng"]
+        st.error(f"❌ 修正が必要な項目: {', '.join(ng_items)}")
+    else:
+        st.warning("⚠️ 確認したほうがいい項目があります")
+
     col_img, col_result = st.columns([1, 1])
 
     # 左: 画像（bbox赤枠付き）
@@ -388,19 +400,6 @@ for i, report in enumerate(reports):
 
             st.markdown(f"### {icon} {result.name}: {result.value}")
             st.markdown(f"<p style='color: {color}; margin-top: -10px;'>{result.detail}</p>", unsafe_allow_html=True)
-
-        # 総合判定
-        st.divider()
-        all_ok = all(r.level == "ok" for r in report.results)
-        has_ng = any(r.level == "ng" for r in report.results)
-
-        if all_ok:
-            st.success("🎉 すべてのチェックをクリア！この画像はAmazon基準OKです")
-        elif has_ng:
-            ng_items = [r.name for r in report.results if r.level == "ng"]
-            st.error(f"❌ 修正が必要な項目: {', '.join(ng_items)}")
-        else:
-            st.warning("⚠️ 確認したほうがいい項目があります")
 
         # --- コメント欄 ---
         comments = load_comments()
