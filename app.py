@@ -233,15 +233,6 @@ with st.sidebar:
                 save_examples("ok", ok_examples)
                 st.rerun()
 
-        with st.form("add_ok_form", clear_on_submit=True):
-            ok_title = st.text_input("OK例を追加", placeholder="例: 影が自然に入っていて立体的")
-            ok_desc = st.text_input("補足（任意）", placeholder="例: 左上からの光で高級感がある", key="ok_desc")
-            ok_submitted = st.form_submit_button("➕ 追加", type="primary")
-            if ok_submitted and ok_title.strip():
-                ok_examples.append({"title": ok_title.strip(), "desc": ok_desc.strip() if ok_desc.strip() else "", "brand": selected_brand})
-                save_examples("ok", ok_examples)
-                st.rerun()
-
         st.markdown("---")
 
         # ❌ NG例
@@ -257,17 +248,30 @@ with st.sidebar:
                 ng_examples.pop(orig_idx)
                 save_examples("ng", ng_examples)
                 st.rerun()
-
-        with st.form("add_ng_form", clear_on_submit=True):
-            ng_title = st.text_input("NG例を追加", placeholder="例: 商品が斜めに傾いている")
-            ng_desc = st.text_input("補足（任意）", placeholder="例: 撮影時の角度調整不足", key="ng_desc")
-            ng_submitted = st.form_submit_button("➕ 追加", type="primary")
-            if ng_submitted and ng_title.strip():
-                ng_examples.append({"title": ng_title.strip(), "desc": ng_desc.strip() if ng_desc.strip() else "", "brand": selected_brand})
-                save_examples("ng", ng_examples)
-                st.rerun()
     else:
         st.caption("👆 ブランドを選ぶとOK例・NG例が表示されます")
+
+    # --- ブランド未選択でも追加できるフォーム ---
+    st.markdown("---")
+    st.markdown("### ➕ 例を追加")
+    with st.form("add_example_form", clear_on_submit=True):
+        ex_brand = st.selectbox("ブランド", ["（選択してください）"] + all_brands, key="ex_brand",
+                                index=(all_brands.index(selected_brand) + 1) if selected_brand in all_brands else 0)
+        ex_type = st.radio("種類", ["✅ OK例", "❌ NG例"], horizontal=True)
+        ex_title = st.text_input("内容", placeholder="例: 影が自然に入っていて立体的")
+        ex_desc = st.text_input("補足（任意）", placeholder="例: 左上からの光で高級感がある", key="ex_desc")
+        ex_submitted = st.form_submit_button("➕ 追加", type="primary")
+        if ex_submitted and ex_title.strip() and ex_brand != "（選択してください）":
+            entry = {"title": ex_title.strip(), "desc": ex_desc.strip() if ex_desc.strip() else "", "brand": ex_brand}
+            if "OK" in ex_type:
+                ok_examples = load_examples("ok")
+                ok_examples.append(entry)
+                save_examples("ok", ok_examples)
+            else:
+                ng_examples = load_examples("ng")
+                ng_examples.append(entry)
+                save_examples("ng", ng_examples)
+            st.rerun()
 
 # --- メインエリア ---
 st.markdown("# 🔍 Amazon商品画像チェッカー")
