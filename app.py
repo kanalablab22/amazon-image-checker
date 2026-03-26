@@ -180,6 +180,32 @@ with st.sidebar:
             st.rerun()
 
     # ===========================================
+    # ブランド一覧（ブランドも追加可能に）
+    # ===========================================
+    st.markdown("---")
+    DEFAULT_BRANDS = ["GRAV", "CAMP GREEB", "sopoa"]
+    custom_brands = _load_data("custom_brands.json")
+    all_brands = DEFAULT_BRANDS + [b for b in custom_brands if b not in DEFAULT_BRANDS]
+
+    # ブランド絞り込みプルダウン
+    st.markdown("### 🏷️ ブランド")
+    selected_brand = st.selectbox(
+        "ブランドで絞り込み",
+        ["すべて"] + all_brands,
+        key="brand_filter",
+    )
+
+    # ブランド追加
+    with st.expander("ブランドを追加"):
+        with st.form("add_brand_form", clear_on_submit=True):
+            new_brand = st.text_input("ブランド名", placeholder="例: 新ブランド名")
+            brand_submitted = st.form_submit_button("➕ 追加")
+            if brand_submitted and new_brand.strip() and new_brand.strip() not in all_brands:
+                custom_brands.append(new_brand.strip())
+                _save_data("custom_brands.json", custom_brands, "ブランド追加")
+                st.rerun()
+
+    # ===========================================
     # ✅ OK例集
     # ===========================================
     st.markdown("---")
@@ -187,21 +213,30 @@ with st.sidebar:
     st.caption("良い画像のポイントをチームで共有")
 
     ok_examples = load_examples("ok")
-    for i, ex in enumerate(ok_examples):
-        st.markdown(f"**{i+1}. {ex['title']}**")
+    # ブランドでフィルタ
+    filtered_ok = [ex for ex in ok_examples if selected_brand == "すべて" or ex.get("brand", "") == selected_brand]
+
+    if not filtered_ok and selected_brand != "すべて":
+        st.caption(f"📭 {selected_brand} のOK例はまだありません")
+    for i, ex in enumerate(filtered_ok):
+        # 元のインデックスを取得（削除用）
+        orig_idx = ok_examples.index(ex)
+        brand_tag = f'<span style="background: #e8f5e9; color: #2e7d32; font-size: 0.7em; padding: 1px 6px; border-radius: 8px; margin-right: 6px;">{ex.get("brand", "")}</span>' if ex.get("brand") else ""
+        st.markdown(f"{brand_tag}**{ex['title']}**", unsafe_allow_html=True)
         if ex.get("desc"):
             st.markdown(f"<p style='margin-top: -10px; margin-bottom: 2px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
-        if st.button("削除", key=f"del_ok_{i}", type="secondary"):
-            ok_examples.pop(i)
+        if st.button("削除", key=f"del_ok_{orig_idx}", type="secondary"):
+            ok_examples.pop(orig_idx)
             save_examples("ok", ok_examples)
             st.rerun()
 
     with st.form("add_ok_form", clear_on_submit=True):
+        ok_brand = st.selectbox("ブランド", all_brands, key="ok_brand")
         ok_title = st.text_input("OK例を追加", placeholder="例: 影が自然に入っていて立体的")
         ok_desc = st.text_input("補足（任意）", placeholder="例: 左上からの光で高級感がある", key="ok_desc")
         ok_submitted = st.form_submit_button("➕ 追加", type="primary")
         if ok_submitted and ok_title.strip():
-            ok_examples.append({"title": ok_title.strip(), "desc": ok_desc.strip() if ok_desc.strip() else ""})
+            ok_examples.append({"title": ok_title.strip(), "desc": ok_desc.strip() if ok_desc.strip() else "", "brand": ok_brand})
             save_examples("ok", ok_examples)
             st.rerun()
 
@@ -213,21 +248,28 @@ with st.sidebar:
     st.caption("NGパターンを共有")
 
     ng_examples = load_examples("ng")
-    for i, ex in enumerate(ng_examples):
-        st.markdown(f"**{i+1}. {ex['title']}**")
+    filtered_ng = [ex for ex in ng_examples if selected_brand == "すべて" or ex.get("brand", "") == selected_brand]
+
+    if not filtered_ng and selected_brand != "すべて":
+        st.caption(f"📭 {selected_brand} のNG例はまだありません")
+    for i, ex in enumerate(filtered_ng):
+        orig_idx = ng_examples.index(ex)
+        brand_tag = f'<span style="background: #fce4ec; color: #c62828; font-size: 0.7em; padding: 1px 6px; border-radius: 8px; margin-right: 6px;">{ex.get("brand", "")}</span>' if ex.get("brand") else ""
+        st.markdown(f"{brand_tag}**{ex['title']}**", unsafe_allow_html=True)
         if ex.get("desc"):
             st.markdown(f"<p style='margin-top: -10px; margin-bottom: 2px; padding-left: 16px; font-size: 0.78em; color: #888;'>{ex['desc']}</p>", unsafe_allow_html=True)
-        if st.button("削除", key=f"del_ng_{i}", type="secondary"):
-            ng_examples.pop(i)
+        if st.button("削除", key=f"del_ng_{orig_idx}", type="secondary"):
+            ng_examples.pop(orig_idx)
             save_examples("ng", ng_examples)
             st.rerun()
 
     with st.form("add_ng_form", clear_on_submit=True):
+        ng_brand = st.selectbox("ブランド", all_brands, key="ng_brand")
         ng_title = st.text_input("NG例を追加", placeholder="例: 商品が斜めに傾いている")
         ng_desc = st.text_input("補足（任意）", placeholder="例: 撮影時の角度調整不足", key="ng_desc")
         ng_submitted = st.form_submit_button("➕ 追加", type="primary")
         if ng_submitted and ng_title.strip():
-            ng_examples.append({"title": ng_title.strip(), "desc": ng_desc.strip() if ng_desc.strip() else ""})
+            ng_examples.append({"title": ng_title.strip(), "desc": ng_desc.strip() if ng_desc.strip() else "", "brand": ng_brand})
             save_examples("ng", ng_examples)
             st.rerun()
 
