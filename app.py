@@ -36,14 +36,6 @@ with st.sidebar:
         st.checkbox(g, value=False, key=g)
 
     st.divider()
-    st.markdown("**画像の技術的要件**")
-    st.markdown("""
-- 形式: JPEG（推奨）/ TIFF / PNG / GIF
-- サイズ: 長辺500px以上〜10,000px以下
-- 解像度: 鮮明、画素化されていないこと
-    """)
-
-    st.divider()
     st.markdown("## 🏢 社内ガイドライン")
 
     internal_guidelines = [
@@ -62,23 +54,19 @@ with st.sidebar:
 st.markdown("# 🔍 Amazon商品画像チェッカー")
 st.markdown("作成した商品画像をアップロードすると、Amazonガイドラインに基づいて自動チェックします")
 
-with st.expander("📌 **チェック項目まとめ**", expanded=True):
+with st.expander("📌 **画像の技術的要件（Amazon公式）**", expanded=False):
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**🏷️ Amazon公式基準**")
         st.markdown("""
-- 白背景（RGB 255,255,255）
-- 画像の85%を商品が占める
-- 長辺500px〜10,000px
-- テキスト・ロゴ・透かしなし
+- **形式**: JPEG（推奨）/ TIFF / PNG / GIF
+- **サイズ**: 長辺500px以上〜10,000px以下
+- **解像度**: 鮮明、画素化されていないこと
         """)
     with col2:
-        st.markdown("**🏢 社内ガイドライン**")
         st.markdown("""
-- 余白を減らして商品を大きく
-- ドロップシャドウ・鏡面反射で高級感
-- 暗くてどんよりしない明るさ
-- 検索結果で目立つ画像に
+- **背景**: 純粋な白（RGB: 255,255,255）
+- **面積比**: 画像の85%を商品が占める
+- **禁止**: テキスト、ロゴ、透かし等なし
         """)
 
 # ファイルアップロード
