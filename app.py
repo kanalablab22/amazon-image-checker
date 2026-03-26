@@ -47,7 +47,8 @@ with st.sidebar:
     ]
 
     for title, desc in internal_guidelines:
-        st.checkbox(f"**{title}**", value=False, help=desc, key=f"internal_{title}")
+        st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
+        st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
 
 # --- メインエリア ---
 st.markdown("# 🔍 Amazon商品画像チェッカー")
