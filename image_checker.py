@@ -8,6 +8,45 @@ from PIL import Image, ImageDraw, ImageStat
 from dataclasses import dataclass
 
 
+def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
+    """
+    商品の色特性を自動判別する。
+    Returns: {
+        "type": "dark" | "light" | "colorful" | "neutral",
+        "avg_brightness": float,
+        "avg_saturation": float,
+        "description": str,
+    }
+    """
+    arr = np.array(image.convert("RGB"))
+    if not np.any(mask):
+        return {"type": "neutral", "avg_brightness": 128, "avg_saturation": 30, "description": "判別不可"}
+
+    pixels = arr[mask].astype(float)
+    r, g, b = pixels[:, 0], pixels[:, 1], pixels[:, 2]
+
+    max_rgb = np.maximum(np.maximum(r, g), b)
+    min_rgb = np.minimum(np.minimum(r, g), b)
+    avg_brightness = float(np.mean(max_rgb))
+    avg_saturation = float(np.mean(max_rgb - min_rgb))
+
+    if avg_brightness < 80:
+        return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
+                "description": "暗色系商品（黒・ダークグレーなど）"}
+    elif avg_brightness < 140 and avg_saturation < 25:
+        return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
+                "description": "暗めの無彩色商品"}
+    elif avg_brightness > 200:
+        return {"type": "light", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
+                "description": "明色系商品（白・ベージュなど）"}
+    elif avg_saturation > 50:
+        return {"type": "colorful", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
+                "description": "カラフルな商品"}
+    else:
+        return {"type": "neutral", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
+                "description": "中間色の商品"}
+
+
 @dataclass
 class CheckResult:
     """チェック結果を格納するデータクラス"""
@@ -605,11 +644,10 @@ def check_edge_sharpness(image: Image.Image, mask: np.ndarray) -> CheckResult:
     )
 
 
-def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
+def check_color_tone(image: Image.Image, mask: np.ndarray, product_type: dict = None) -> CheckResult:
     """
     チェック11: 色味・色の自然さ
-    商品部分の彩度と色温度をチェック。
-    くすんだ色やどんよりした色味はNG。
+    商品の色タイプに応じて基準を自動調整。
     """
     arr = np.array(image.convert("RGB"))
 
@@ -617,43 +655,54 @@ def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
         return CheckResult(name="色味", passed=True, value="計測不可",
                           detail="商品領域が検出できませんでした", level="warn")
 
+    if product_type is None:
+        product_type = _detect_product_type(image, mask)
+
     product_pixels = arr[mask].astype(float)
     r = product_pixels[:, 0]
     g = product_pixels[:, 1]
     b = product_pixels[:, 2]
 
-    # 彩度の指標: RGB間の差が大きいほど鮮やか
     max_rgb = np.maximum(np.maximum(r, g), b)
     min_rgb = np.minimum(np.minimum(r, g), b)
     saturation = max_rgb - min_rgb
     avg_saturation = float(np.mean(saturation))
-
-    # 色温度の指標: R-B差（正=暖色、負=寒色）
     warmth = float(np.mean(r - b))
-
-    # 全体的なくすみ: 彩度が低く輝度も中間だとくすんで見える
     avg_brightness = float(np.mean(max_rgb))
 
     issues = []
     level = "ok"
+    ptype = product_type["type"]
 
-    if avg_saturation < 15 and avg_brightness < 200:
-        issues.append("彩度が低めです。商品の色が本来の色で再現されているか確認しましょう")
-        level = "warn"  # 黒系商品もあるためNGではなくwarnに緩和
-    elif avg_saturation < 25 and avg_brightness < 200:
-        issues.append("やや色味が控えめです")
-        if level == "ok":
+    # 暗色系・無彩色商品は彩度が低くて当然 → 判定を大幅に緩和
+    if ptype == "dark":
+        # 暗い商品は彩度チェックをほぼスキップ
+        if avg_saturation < 5 and avg_brightness > 60:
+            issues.append("彩度がかなり低めです。照明や色調補正を確認してみてください")
+            level = "warn"
+    elif ptype == "colorful":
+        # カラフルな商品は彩度が高いはずなのに低い場合はNG
+        if avg_saturation < 20:
+            issues.append("色味が薄れています。商品本来の鮮やかさを再現しましょう")
+            level = "ng"
+    else:
+        # 中間色・明色商品
+        if avg_saturation < 10 and avg_brightness < 200:
+            issues.append("彩度が低めです。商品の色が本来の色で再現されているか確認しましょう")
             level = "warn"
 
-    if warmth < -20:
-        issues.append("青みが強く冷たい印象です。暖色寄りに調整すると商品が映えます")
+    if warmth < -25:
+        issues.append("青みが強く冷たい印象です")
         if level == "ok":
             level = "warn"
 
     if not issues:
-        detail = "色味が自然で魅力的です"
-        if warmth > 10:
-            detail += "（暖色系で好印象）"
+        if ptype == "dark":
+            detail = "暗色系商品として適切な色味です"
+        else:
+            detail = "色味が自然で魅力的です"
+            if warmth > 10:
+                detail += "（暖色系で好印象）"
     else:
         detail = "。".join(issues)
 
@@ -666,11 +715,10 @@ def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
     )
 
 
-def check_local_darkness(image: Image.Image, mask: np.ndarray, bbox: tuple) -> CheckResult:
+def check_local_darkness(image: Image.Image, mask: np.ndarray, bbox: tuple, product_type: dict = None) -> CheckResult:
     """
     チェック12: 局所暗部検出
-    商品の一部だけが暗い（穴の中が暗い、パーツの隙間が暗い等）を検出。
-    商品領域をグリッドに分割して、局所的に極端に暗い領域がないか確認する。
+    商品タイプに応じて基準を自動調整。暗色系商品は判定を緩和。
     """
     arr = np.array(image.convert("L")).astype(float)
 
@@ -732,15 +780,28 @@ def check_local_darkness(image: Image.Image, mask: np.ndarray, bbox: tuple) -> C
         darkest_diff = 0
         darkest_lum = overall_mean
 
-    if dark_ratio > 0.25 or darkest_diff > 80:
-        level = "ng"
-        detail = f"商品の一部が極端に暗いです（最暗部 輝度{darkest_lum:.0f}）。ライティングを調整して暗い部分を減らしましょう"
-    elif dark_ratio > 0.1 or darkest_diff > 50:
-        level = "warn"
-        detail = f"やや暗い部分があります（最暗部 輝度{darkest_lum:.0f}）。全体的に均一な明るさが理想です"
+    if product_type is None:
+        product_type = _detect_product_type(image, mask)
+    ptype = product_type["type"]
+
+    # 暗色系商品は基準を大幅に緩和
+    if ptype == "dark":
+        if dark_ratio > 0.5 and darkest_diff > 100:
+            level = "warn"
+            detail = f"暗色系商品ですが、部分的に極端な暗さがあります（最暗部 輝度{darkest_lum:.0f}）"
+        else:
+            level = "ok"
+            detail = "暗色系商品として明暗のバランスは適切です"
     else:
-        level = "ok"
-        detail = "商品全体が均一に明るく、暗すぎる部分はありません"
+        if dark_ratio > 0.25 or darkest_diff > 80:
+            level = "ng"
+            detail = f"商品の一部が極端に暗いです（最暗部 輝度{darkest_lum:.0f}）。ライティングを調整して暗い部分を減らしましょう"
+        elif dark_ratio > 0.1 or darkest_diff > 50:
+            level = "warn"
+            detail = f"やや暗い部分があります（最暗部 輝度{darkest_lum:.0f}）。全体的に均一な明るさが理想です"
+        else:
+            level = "ok"
+            detail = "商品全体が均一に明るく、暗すぎる部分はありません"
 
     return CheckResult(
         name="局所暗部",
@@ -909,6 +970,9 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
     # 6. アスペクト比
     results.append(check_aspect_ratio(image))
 
+    # --- 商品タイプ自動判別 ---
+    product_type = _detect_product_type(image, mask)
+
     # --- 社内品質チェック ---
     # 7. 質感
     results.append(check_texture_quality(image, mask))
@@ -922,11 +986,11 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
     # 10. エッジの鮮明度
     results.append(check_edge_sharpness(image, mask))
 
-    # 11. 色味
-    results.append(check_color_tone(image, mask))
+    # 11. 色味（商品タイプ考慮）
+    results.append(check_color_tone(image, mask, product_type))
 
-    # 12. 局所暗部
-    results.append(check_local_darkness(image, mask, bbox))
+    # 12. 局所暗部（商品タイプ考慮）
+    results.append(check_local_darkness(image, mask, bbox, product_type))
 
     # 13. 光の方向性
     results.append(check_lighting_direction(image, mask, bbox))
