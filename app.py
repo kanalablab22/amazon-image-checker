@@ -495,22 +495,23 @@ with st.spinner("Amazon検索結果を取得中..."):
             insert_pos = min(4, len(all_imgs))  # 5番目
             all_imgs.insert(insert_pos, user_img)
 
-            # 商品カードHTML生成
+            # 商品カードHTML生成（2列グリッド）
             cards_html = ""
             for idx, img in enumerate(all_imgs):
                 b64 = _img_to_b64(img)
                 cards_html += f'''
-                <div style="display:flex; padding:10px; border-bottom:1px solid #eee; background:#fff;">
-                    <img src="data:image/jpeg;base64,{b64}"
-                         style="width:110px; height:110px; object-fit:contain; flex-shrink:0; background:#fff;">
-                    <div style="margin-left:10px; flex:1; overflow:hidden;">
-                        <div style="background:#ddd; height:10px; width:90%; border-radius:3px; margin-bottom:6px;"></div>
-                        <div style="background:#ddd; height:10px; width:70%; border-radius:3px; margin-bottom:8px;"></div>
-                        <div style="color:#B12704; font-weight:bold; font-size:16px;">¥X,XXX</div>
-                        <div style="font-size:11px; color:#888; margin-top:3px;">送料無料</div>
-                        <div style="margin-top:4px;">
-                            <span style="color:#FF9900; font-size:12px;">★★★★☆</span>
-                            <span style="font-size:11px; color:#888;">(XXX)</span>
+                <div style="background:#fff; border:1px solid #eee; border-radius:4px; overflow:hidden;">
+                    <div style="padding:8px; display:flex; justify-content:center; align-items:center; height:120px; background:#fff;">
+                        <img src="data:image/jpeg;base64,{b64}"
+                             style="max-width:100%; max-height:110px; object-fit:contain;">
+                    </div>
+                    <div style="padding:6px 8px;">
+                        <div style="background:#ddd; height:8px; width:90%; border-radius:2px; margin-bottom:4px;"></div>
+                        <div style="background:#ddd; height:8px; width:60%; border-radius:2px; margin-bottom:6px;"></div>
+                        <div style="color:#B12704; font-weight:bold; font-size:14px;">¥X,XXX</div>
+                        <div style="margin-top:2px;">
+                            <span style="color:#FF9900; font-size:11px;">★★★★☆</span>
+                            <span style="font-size:10px; color:#888;">(XX)</span>
                         </div>
                     </div>
                 </div>'''
@@ -554,13 +555,20 @@ with st.spinner("Amazon検索結果を取得中..."):
                                 🔍 {target_keyword}
                             </div>
                         </div>
-                        <!-- 検索結果（スクロール可能） -->
+                        <!-- 検索結果（2列グリッド・スクロール可能） -->
                         <div style="
                             height: calc(100% - 100px);
                             overflow-y: auto;
                             -webkit-overflow-scrolling: touch;
+                            padding: 6px;
                         ">
-                            {cards_html}
+                            <div style="
+                                display: grid;
+                                grid-template-columns: 1fr 1fr;
+                                gap: 6px;
+                            ">
+                                {cards_html}
+                            </div>
                         </div>
                     </div>
                     <!-- ホームバー -->
