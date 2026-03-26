@@ -638,10 +638,10 @@ def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
     level = "ok"
 
     if avg_saturation < 15 and avg_brightness < 200:
-        issues.append("色がくすんでいます。彩度を上げるとより魅力的になります")
-        level = "ng"
+        issues.append("彩度が低めです。商品の色が本来の色で再現されているか確認しましょう")
+        level = "warn"  # 黒系商品もあるためNGではなくwarnに緩和
     elif avg_saturation < 25 and avg_brightness < 200:
-        issues.append("やや色味が弱いです")
+        issues.append("やや色味が控えめです")
         if level == "ok":
             level = "warn"
 
@@ -734,7 +734,7 @@ def check_local_darkness(image: Image.Image, mask: np.ndarray, bbox: tuple) -> C
 
     if dark_ratio > 0.25 or darkest_diff > 80:
         level = "ng"
-        detail = f"商品の一部が極端に暗いです（最暗部 輝度{darkest_lum:.0f}）。穴の中や隙間も明るく見えるよう調整しましょう"
+        detail = f"商品の一部が極端に暗いです（最暗部 輝度{darkest_lum:.0f}）。ライティングを調整して暗い部分を減らしましょう"
     elif dark_ratio > 0.1 or darkest_diff > 50:
         level = "warn"
         detail = f"やや暗い部分があります（最暗部 輝度{darkest_lum:.0f}）。全体的に均一な明るさが理想です"
