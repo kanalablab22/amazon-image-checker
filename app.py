@@ -18,8 +18,7 @@ st.set_page_config(
 # --- サイドバー: Amazon公式ガイドライン ---
 with st.sidebar:
     st.markdown("## 📋 商品のメイン画像 要件")
-    st.markdown("Amazon Seller Central 公式ガイドラインより")
-    st.divider()
+    st.caption("Amazon Seller Central 公式ガイドラインより")
 
     guidelines = [
         "実際の商品を正確に表し、プロフェッショナルな品質の画像であること",
