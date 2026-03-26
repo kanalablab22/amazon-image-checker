@@ -11,7 +11,8 @@ from PIL import Image
 from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
-from amazon_search_sim import create_search_simulation, create_mobile_simulation, fetch_amazon_thumbnails
+from amazon_search_sim import create_search_simulation, fetch_amazon_thumbnails
+import streamlit.components.v1 as components
 
 # --- カスタムデータの永続化（GitHub API / 汎用） ---
 import os
@@ -483,13 +484,94 @@ with st.spinner("Amazon検索結果を取得中..."):
             st.image(sim_pc, use_column_width=True)
         with col_sp:
             st.markdown("**📱 スマホ版**")
-            sim_mobile = create_mobile_simulation(
-                keyword=target_keyword,
-                user_image=user_img,
-                position=5,
-                competitor_images=competitors[:5],
-            )
-            st.image(sim_mobile, use_column_width=True)
+            # 全画像をbase64に変換
+            def _img_to_b64(img):
+                buf = BytesIO()
+                img.convert("RGB").save(buf, format="JPEG", quality=85)
+                return base64.b64encode(buf.getvalue()).decode()
+
+            # ユーザー画像 + 競合画像をリスト化
+            all_imgs = list(competitors[:7])
+            insert_pos = min(4, len(all_imgs))  # 5番目
+            all_imgs.insert(insert_pos, user_img)
+
+            # 商品カードHTML生成
+            cards_html = ""
+            for idx, img in enumerate(all_imgs):
+                b64 = _img_to_b64(img)
+                cards_html += f'''
+                <div style="display:flex; padding:10px; border-bottom:1px solid #eee; background:#fff;">
+                    <img src="data:image/jpeg;base64,{b64}"
+                         style="width:110px; height:110px; object-fit:contain; flex-shrink:0; background:#fff;">
+                    <div style="margin-left:10px; flex:1; overflow:hidden;">
+                        <div style="background:#ddd; height:10px; width:90%; border-radius:3px; margin-bottom:6px;"></div>
+                        <div style="background:#ddd; height:10px; width:70%; border-radius:3px; margin-bottom:8px;"></div>
+                        <div style="color:#B12704; font-weight:bold; font-size:16px;">¥X,XXX</div>
+                        <div style="font-size:11px; color:#888; margin-top:3px;">送料無料</div>
+                        <div style="margin-top:4px;">
+                            <span style="color:#FF9900; font-size:12px;">★★★★☆</span>
+                            <span style="font-size:11px; color:#888;">(XXX)</span>
+                        </div>
+                    </div>
+                </div>'''
+
+            # iPhoneフレーム HTML
+            phone_html = f'''
+            <div style="display:flex; justify-content:center;">
+                <div style="
+                    width: 300px;
+                    height: 620px;
+                    border-radius: 45px;
+                    border: 8px solid #1a1a1a;
+                    background: #1a1a1a;
+                    padding: 0;
+                    position: relative;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                    overflow: hidden;
+                ">
+                    <!-- ノッチ -->
+                    <div style="
+                        position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+                        width: 120px; height: 28px;
+                        background: #1a1a1a; border-radius: 0 0 18px 18px; z-index: 10;
+                    "></div>
+                    <!-- 画面 -->
+                    <div style="
+                        width: 100%; height: 100%;
+                        border-radius: 37px;
+                        overflow: hidden;
+                        background: #fff;
+                    ">
+                        <!-- ステータスバー -->
+                        <div style="height:48px; background:#232F3E; display:flex; align-items:center; padding:0 15px;">
+                            <div style="color:white; font-size:11px; margin-top:16px;">9:41</div>
+                            <div style="flex:1;"></div>
+                            <div style="color:white; font-size:11px; margin-top:16px;">📶 🔋</div>
+                        </div>
+                        <!-- Amazon検索バー -->
+                        <div style="background:#232F3E; padding:5px 12px 10px;">
+                            <div style="background:white; border-radius:8px; padding:7px 12px; font-size:13px; color:#333;">
+                                🔍 {target_keyword}
+                            </div>
+                        </div>
+                        <!-- 検索結果（スクロール可能） -->
+                        <div style="
+                            height: calc(100% - 100px);
+                            overflow-y: auto;
+                            -webkit-overflow-scrolling: touch;
+                        ">
+                            {cards_html}
+                        </div>
+                    </div>
+                    <!-- ホームバー -->
+                    <div style="
+                        position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
+                        width:100px; height:4px; background:#666; border-radius:2px;
+                    "></div>
+                </div>
+            </div>'''
+
+            components.html(phone_html, height=660)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
