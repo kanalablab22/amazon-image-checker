@@ -5,29 +5,65 @@ Amazon商品画像チェッカー
 
 import streamlit as st
 import json
-import os
+import base64
+import requests
 from PIL import Image
 from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
 
-# --- カスタムガイドラインの永続化 ---
-CUSTOM_GUIDELINES_FILE = os.path.join(os.path.dirname(__file__), "custom_guidelines.json")
+# --- カスタムガイドラインの永続化（GitHub API） ---
+GUIDELINES_PATH = "custom_guidelines.json"
+
+def _github_headers():
+    """GitHub API用ヘッダー"""
+    token = st.secrets.get("github", {}).get("token", "")
+    return {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+def _github_repo():
+    return st.secrets.get("github", {}).get("repo", "kanalablab22/amazon-image-checker")
 
 def load_custom_guidelines() -> list:
-    """保存済みのカスタムガイドラインを読み込む"""
-    if os.path.exists(CUSTOM_GUIDELINES_FILE):
-        try:
-            with open(CUSTOM_GUIDELINES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return []
+    """GitHubリポジトリからカスタムガイドラインを読み込む"""
+    try:
+        repo = _github_repo()
+        url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}?ref=data"
+        resp = requests.get(url, headers=_github_headers(), timeout=5)
+        if resp.status_code == 200:
+            content = base64.b64decode(resp.json()["content"]).decode("utf-8")
+            return json.loads(content)
+    except Exception:
+        pass
     return []
 
 def save_custom_guidelines(guidelines: list):
-    """カスタムガイドラインをファイルに保存"""
-    with open(CUSTOM_GUIDELINES_FILE, "w", encoding="utf-8") as f:
-        json.dump(guidelines, f, ensure_ascii=False, indent=2)
+    """GitHubリポジトリにカスタムガイドラインを保存"""
+    try:
+        repo = _github_repo()
+        url = f"https://api.github.com/repos/{repo}/contents/{GUIDELINES_PATH}"
+
+        # 既存ファイルのSHAを取得（更新時に必要）
+        sha = None
+        resp = requests.get(url + "?ref=data", headers=_github_headers(), timeout=5)
+        if resp.status_code == 200:
+            sha = resp.json()["sha"]
+
+        # ファイルを作成/更新
+        content = json.dumps(guidelines, ensure_ascii=False, indent=2)
+        data = {
+            "message": "ガイドライン更新",
+            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+            "branch": "data",
+        }
+        if sha:
+            data["sha"] = sha
+
+        requests.put(url, headers=_github_headers(), json=data, timeout=5)
+    except Exception as e:
+        st.toast(f"⚠️ 保存エラー: {e}", icon="⚠️")
 
 st.set_page_config(
     page_title="Amazon画像チェッカー",
