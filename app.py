@@ -505,8 +505,8 @@ with st.spinner("Amazon検索結果を取得中..."):
                 competitor_images=competitors,
             )
         with tab_sp:
-            # PC版と同じ実HTMLを375px幅で表示
-            amazon_html_sp = fetch_amazon_search_html(target_keyword, user_img, position=5)
+            # PC版と同じHTMLを使い回し（2回目のリクエスト不要）
+            amazon_html_sp = amazon_html
             # スマホ幅に制限するCSS追加
             sp_css = """
             <style>
