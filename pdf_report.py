@@ -108,31 +108,30 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
     ))
     elements.append(Spacer(1, 5 * mm))
 
-    # サマリーテーブル（Paragraphで折り返し対応）
-    header_labels = ["ファイル名", "サイズ", "面積比", "影", "画像サイズ", "明るさ", "白背景", "比率", "総合"]
+    # サマリーテーブル（13項目を2行で表示: Amazon公式 + 社内品質）
+    header_labels = ["ファイル名", "サイズ", "OK", "注意", "NG", "NG項目", "総合"]
     header = [Paragraph(h, styles["JP_Header"]) for h in header_labels]
     table_data = [header]
 
     for report in reports:
+        ok_count = sum(1 for r in report.results if r.level == "ok")
+        warn_count = sum(1 for r in report.results if r.level == "warn")
+        ng_count = sum(1 for r in report.results if r.level == "ng")
+        ng_items = [r.name for r in report.results if r.level == "ng"]
+        all_passed = ng_count == 0 and warn_count == 0
+
         row = [
             Paragraph(report.filename, styles["JP_Small"]),
             Paragraph(f"{report.width}x{report.height}", styles["JP_Small"]),
+            Paragraph(f"{ok_count}", styles["JP_Small"]),
+            Paragraph(f"{warn_count}", styles["JP_Small"]),
+            Paragraph(f"{ng_count}", styles["JP_Small"]),
+            Paragraph(", ".join(ng_items) if ng_items else "-", styles["JP_Small"]),
+            Paragraph("合格" if all_passed else "要修正", styles["JP_Small"]),
         ]
-        all_passed = True
-        for result in report.results:
-            if result.level == "ok":
-                cell = f"OK {result.value}"
-            elif result.level == "warn":
-                cell = f"注意 {result.value}"
-                all_passed = False
-            else:
-                cell = f"NG {result.value}"
-                all_passed = False
-            row.append(Paragraph(cell, styles["JP_Small"]))
-        row.append(Paragraph("合格" if all_passed else "要修正", styles["JP_Small"]))
         table_data.append(row)
 
-    col_widths = [45 * mm, 22 * mm, 35 * mm, 18 * mm, 28 * mm, 28 * mm, 20 * mm, 28 * mm, 18 * mm]
+    col_widths = [45 * mm, 25 * mm, 15 * mm, 15 * mm, 15 * mm, 100 * mm, 22 * mm]
     table = Table(table_data, colWidths=col_widths)
 
     # テーブルスタイル
@@ -151,21 +150,16 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
     # 行ごとの色分け
     for row_idx in range(1, len(table_data)):
         row = table_data[row_idx]
-        # Paragraphオブジェクトからテキストを取得
         last_cell_text = row[-1].text if hasattr(row[-1], 'text') else str(row[-1])
         if "合格" in last_cell_text:
             style_commands.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#E8F5E9")))
         else:
             style_commands.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#FFF3E0")))
 
-        # 個別セルの色
-        for col_idx in range(2, len(row) - 1):
-            cell = row[col_idx]
-            cell_text = cell.text if hasattr(cell, 'text') else str(cell)
-            if cell_text.startswith("NG"):
-                style_commands.append(("TEXTCOLOR", (col_idx, row_idx), (col_idx, row_idx), colors.red))
-            elif cell_text.startswith("注意"):
-                style_commands.append(("TEXTCOLOR", (col_idx, row_idx), (col_idx, row_idx), colors.HexColor("#FF8F00")))
+        # NG件数セル（col 4）を赤文字に
+        ng_cell_text = row[4].text if hasattr(row[4], 'text') else str(row[4])
+        if ng_cell_text != "0":
+            style_commands.append(("TEXTCOLOR", (4, row_idx), (4, row_idx), colors.red))
 
     table.setStyle(TableStyle(style_commands))
     elements.append(table)
@@ -186,7 +180,7 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
                 Paragraph(f"{result.detail}", styles["JP_Small"]),
             ])
 
-        detail_table = Table(detail_data, colWidths=[25 * mm, 30 * mm, 90 * mm])
+        detail_table = Table(detail_data, colWidths=[22 * mm, 35 * mm, 95 * mm])
         detail_style = [
             ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
             ("FONTSIZE", (0, 0), (-1, -1), 7),

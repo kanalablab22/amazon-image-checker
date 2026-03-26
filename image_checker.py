@@ -645,6 +645,169 @@ def check_color_tone(image: Image.Image, mask: np.ndarray) -> CheckResult:
     )
 
 
+def check_local_darkness(image: Image.Image, mask: np.ndarray, bbox: tuple) -> CheckResult:
+    """
+    チェック12: 局所暗部検出
+    商品の一部だけが暗い（穴の中が暗い、パーツの隙間が暗い等）を検出。
+    商品領域をグリッドに分割して、局所的に極端に暗い領域がないか確認する。
+    """
+    arr = np.array(image.convert("L")).astype(float)
+
+    if not np.any(mask):
+        return CheckResult(name="局所暗部", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    left, top, right, bottom = bbox
+    product_region = arr[top:bottom, left:right]
+    mask_region = mask[top:bottom, left:right]
+
+    if product_region.size == 0 or not np.any(mask_region):
+        return CheckResult(name="局所暗部", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    # 商品全体の平均輝度
+    product_pixels = arr[mask]
+    overall_mean = float(np.mean(product_pixels))
+
+    # 商品領域をグリッド分割（6x6）して各ブロックの輝度を計算
+    grid_rows, grid_cols = 6, 6
+    bh = max(1, (bottom - top) // grid_rows)
+    bw = max(1, (right - left) // grid_cols)
+
+    dark_blocks = []
+    total_blocks = 0
+
+    for gy in range(grid_rows):
+        for gx in range(grid_cols):
+            y1 = top + gy * bh
+            y2 = min(top + (gy + 1) * bh, bottom)
+            x1 = left + gx * bw
+            x2 = min(left + (gx + 1) * bw, right)
+
+            block_mask = mask[y1:y2, x1:x2]
+            if not np.any(block_mask):
+                continue
+
+            block_pixels = arr[y1:y2, x1:x2][block_mask]
+            block_mean = float(np.mean(block_pixels))
+            total_blocks += 1
+
+            # 全体平均より大幅に暗いブロック（40以上暗い or 輝度60未満）
+            if block_mean < overall_mean - 40 or block_mean < 60:
+                dark_blocks.append({
+                    "row": gy, "col": gx,
+                    "mean": block_mean,
+                    "diff": overall_mean - block_mean,
+                })
+
+    dark_ratio = len(dark_blocks) / total_blocks if total_blocks > 0 else 0
+
+    # 最も暗いブロックの情報
+    if dark_blocks:
+        darkest = max(dark_blocks, key=lambda b: b["diff"])
+        darkest_diff = darkest["diff"]
+        darkest_lum = darkest["mean"]
+    else:
+        darkest_diff = 0
+        darkest_lum = overall_mean
+
+    if dark_ratio > 0.25 or darkest_diff > 80:
+        level = "ng"
+        detail = f"商品の一部が極端に暗いです（最暗部 輝度{darkest_lum:.0f}）。穴の中や隙間も明るく見えるよう調整しましょう"
+    elif dark_ratio > 0.1 or darkest_diff > 50:
+        level = "warn"
+        detail = f"やや暗い部分があります（最暗部 輝度{darkest_lum:.0f}）。全体的に均一な明るさが理想です"
+    else:
+        level = "ok"
+        detail = "商品全体が均一に明るく、暗すぎる部分はありません"
+
+    return CheckResult(
+        name="局所暗部",
+        passed=level != "ng",
+        value=f"暗部 {len(dark_blocks)}/{total_blocks}ブロック",
+        detail=detail,
+        level=level,
+    )
+
+
+def check_lighting_direction(image: Image.Image, mask: np.ndarray, bbox: tuple) -> CheckResult:
+    """
+    チェック13: 光の方向性
+    まっすぐ正面からのフラットなライトではなく、
+    斜め（左上など）から光が当たっている自然な明暗グラデーションがあるかチェック。
+    左上が明るく右下が暗い = 自然な陰影 = 立体的に見える
+    """
+    arr = np.array(image.convert("L")).astype(float)
+
+    if not np.any(mask):
+        return CheckResult(name="光の方向性", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    left, top, right, bottom = bbox
+    mid_y = (top + bottom) // 2
+    mid_x = (left + right) // 2
+
+    # 商品を4象限に分割して平均輝度を比較
+    quadrants = {
+        "左上": (top, mid_y, left, mid_x),
+        "右上": (top, mid_y, mid_x, right),
+        "左下": (mid_y, bottom, left, mid_x),
+        "右下": (mid_y, bottom, mid_x, right),
+    }
+
+    quad_lum = {}
+    for name, (y1, y2, x1, x2) in quadrants.items():
+        region_mask = mask[y1:y2, x1:x2]
+        if np.any(region_mask):
+            quad_lum[name] = float(np.mean(arr[y1:y2, x1:x2][region_mask]))
+        else:
+            quad_lum[name] = None
+
+    # 有効な象限が3つ未満なら判定不能
+    valid_quads = {k: v for k, v in quad_lum.items() if v is not None}
+    if len(valid_quads) < 3:
+        return CheckResult(name="光の方向性", passed=True, value="計測不可",
+                          detail="商品領域が小さすぎて判定できませんでした", level="warn")
+
+    lum_values = list(valid_quads.values())
+    max_lum = max(lum_values)
+    min_lum = min(lum_values)
+    lum_range = max_lum - min_lum
+
+    # 明るい象限と暗い象限
+    brightest = max(valid_quads, key=valid_quads.get)
+    darkest = min(valid_quads, key=valid_quads.get)
+
+    # 自然な光の方向パターン（左上が明るいのが理想的）
+    ideal_patterns = ["左上"]  # 左上からの光が最も自然
+    has_natural_direction = brightest in ideal_patterns
+
+    # 4象限の輝度の標準偏差（大きいほどメリハリがある）
+    lum_std = float(np.std(lum_values))
+
+    if lum_range > 25 and lum_std > 8:
+        if has_natural_direction:
+            level = "ok"
+            detail = f"左上からの自然な光の当たり方で立体感が出ています（{brightest}が最も明るい）"
+        else:
+            level = "ok"
+            detail = f"光の方向性があり立体感が出ています（{brightest}が最も明るい）"
+    elif lum_range > 12 and lum_std > 4:
+        level = "warn"
+        detail = f"光の方向性がやや弱いです。斜めからライトを当てるともっと立体感が出ます（明暗差 {lum_range:.0f}）"
+    else:
+        level = "ng"
+        detail = f"まっすぐなライトでフラットな印象です（明暗差 {lum_range:.0f}）。斜め上から光を当てて立体感を出しましょう"
+
+    return CheckResult(
+        name="光の方向性",
+        passed=level != "ng",
+        value=f"明暗差 {lum_range:.0f}（{brightest}↔{darkest}）",
+        detail=detail,
+        level=level,
+    )
+
+
 def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
     """商品bboxに赤枠を描画した画像を作成"""
     annotated = image.copy().convert("RGB")
@@ -716,6 +879,12 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
 
     # 11. 色味
     results.append(check_color_tone(image, mask))
+
+    # 12. 局所暗部
+    results.append(check_local_darkness(image, mask, bbox))
+
+    # 13. 光の方向性
+    results.append(check_lighting_direction(image, mask, bbox))
 
     # bbox赤枠付き画像
     annotated = _create_annotated_image(image, bbox)
