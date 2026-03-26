@@ -541,18 +541,18 @@ with st.spinner("Amazon検索結果を取得中..."):
                 </div>'''
 
             mobile_grid = f'''
-            <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#fff; padding:0;">
-                <div style="background:#232F3E; padding:10px 12px;">
-                    <div style="background:#fff; border-radius:8px; padding:9px 14px; font-size:14px; color:#555;">
+            <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#fff; padding:0; max-width:375px; margin:0 auto;">
+                <div style="background:#232F3E; padding:8px 10px;">
+                    <div style="background:#fff; border-radius:8px; padding:7px 12px; font-size:13px; color:#555;">
                         🔍 {target_keyword}
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px;">
                     {cards}
                 </div>
             </div>'''
 
-            components.html(mobile_grid, height=800, scrolling=True)
+            components.html(mobile_grid, height=700, scrolling=True)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
