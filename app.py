@@ -508,9 +508,10 @@ with st.spinner("Amazon検索結果を取得中..."):
             # モバイル版HTMLを取得
             mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # 不要なCSS注入は削除（フレーム側で制御）
+            # data: URL方式でiframeに読み込み（ネストHTML問題を回避）
+            mobile_b64 = base64.b64encode(mobile_html.encode('utf-8')).decode('ascii')
+            iframe_src = f"data:text/html;base64,{mobile_b64}"
 
-            # iPhoneフレーム外枠 + 中にモバイルHTMLを直接表示
             phone_wrapper = f'''
             <div style="display:flex; justify-content:center; background:#fff;">
                 <div style="
@@ -527,10 +528,12 @@ with st.spinner("Amazon検索結果を取得中..."):
                     "></div>
                     <div style="
                         width: 100%; height: 100%;
-                        border-radius: 37px; overflow-y: auto;
-                        -webkit-overflow-scrolling: touch; background: #fff;
+                        border-radius: 37px; overflow: hidden; background: #fff;
                     ">
-                        {mobile_html}
+                        <iframe src="{iframe_src}"
+                            style="width:100%; height:100%; border:none;"
+                            sandbox="allow-same-origin">
+                        </iframe>
                     </div>
                     <div style="
                         position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
