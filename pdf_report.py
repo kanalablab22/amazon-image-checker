@@ -108,12 +108,16 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
     ))
     elements.append(Spacer(1, 5 * mm))
 
-    # サマリーテーブル
-    header = ["ファイル名", "サイズ", "面積比", "影", "画像サイズ", "明るさ", "白背景", "比率", "総合"]
+    # サマリーテーブル（Paragraphで折り返し対応）
+    header_labels = ["ファイル名", "サイズ", "面積比", "影", "画像サイズ", "明るさ", "白背景", "比率", "総合"]
+    header = [Paragraph(h, styles["JP_Header"]) for h in header_labels]
     table_data = [header]
 
     for report in reports:
-        row = [report.filename, f"{report.width}x{report.height}"]
+        row = [
+            Paragraph(report.filename, styles["JP_Small"]),
+            Paragraph(f"{report.width}x{report.height}", styles["JP_Small"]),
+        ]
         all_passed = True
         for result in report.results:
             if result.level == "ok":
@@ -124,11 +128,11 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
             else:
                 cell = f"NG {result.value}"
                 all_passed = False
-            row.append(cell)
-        row.append("合格" if all_passed else "要修正")
+            row.append(Paragraph(cell, styles["JP_Small"]))
+        row.append(Paragraph("合格" if all_passed else "要修正", styles["JP_Small"]))
         table_data.append(row)
 
-    col_widths = [55 * mm, 25 * mm, 25 * mm, 20 * mm, 25 * mm, 25 * mm, 22 * mm, 28 * mm, 22 * mm]
+    col_widths = [45 * mm, 22 * mm, 35 * mm, 18 * mm, 28 * mm, 28 * mm, 20 * mm, 28 * mm, 18 * mm]
     table = Table(table_data, colWidths=col_widths)
 
     # テーブルスタイル
