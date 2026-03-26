@@ -79,13 +79,14 @@ def _pil_to_rl_image(pil_image: Image.Image, max_width: float = 80 * mm, max_hei
     return RLImage(buf, width=display_w, height=display_h)
 
 
-def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
+def generate_pdf_report(reports, original_images=None, comments=None, sim_image=None) -> bytes:
     """
     チェック結果のPDFレポートを生成
     Args:
         reports: ImageCheckReport のリスト
         original_images: PIL Image のリスト（元画像）
         comments: dict - ファイル名→コメントリスト
+        sim_image: PIL Image - 検索結果シミュレーション画像
     Returns: PDF bytes
     """
     if comments is None:
@@ -227,6 +228,15 @@ def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
             ))
 
         elements.append(Spacer(1, 6 * mm))
+
+    # 検索結果シミュレーション
+    if sim_image is not None:
+        elements.append(Spacer(1, 5 * mm))
+        elements.append(Paragraph("■ 検索結果シミュレーション", styles["JP_Normal"]))
+        elements.append(Spacer(1, 3 * mm))
+        sim_rl = _pil_to_rl_image(sim_image, max_width=240 * mm, max_height=100 * mm)
+        elements.append(sim_rl)
+        elements.append(Spacer(1, 5 * mm))
 
     # フッター: ガイドライン参照
     elements.append(Spacer(1, 5 * mm))

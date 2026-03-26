@@ -483,6 +483,7 @@ st.markdown("## 🔍 検索結果シミュレーション")
 st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ")
 
 # 最初の画像を使ってシミュレーション
+sim_pc = None
 with st.spinner("Amazon検索結果を取得中..."):
     try:
         uploaded_files[0].seek(0)
@@ -616,7 +617,7 @@ with st.spinner("PDF生成中..."):
     all_comments = load_comments()
     if not isinstance(all_comments, dict):
         all_comments = {}
-    pdf_bytes = generate_pdf_report(reports, original_images, comments=all_comments)
+    pdf_bytes = generate_pdf_report(reports, original_images, comments=all_comments, sim_image=sim_pc)
 
 st.download_button(
     label="📥 PDFレポートをダウンロード",
