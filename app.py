@@ -37,7 +37,8 @@ with st.sidebar:
     st.divider()
     st.markdown("## 🏢 社内ガイドライン")
 
-    internal_guidelines = [
+    # デフォルトのガイドライン
+    default_guidelines = [
         ("商品を大きく、白余白を最小限に", "色を濃く商品を大きくするのがCTR改善のコツ"),
         ("陰影・鏡面で少しインパクトを出す", "ドロップシャドウや鏡面反射で高級感"),
         ("暗くてどんよりしないよう明るさに注意", "検索結果のサムネイルで暗く見えないか要チェック"),
@@ -48,9 +49,29 @@ with st.sidebar:
         ("細部にこだわる", "光の感じ、立体感、木や布の質感を追求"),
     ]
 
-    for title, desc in internal_guidelines:
+    # ユーザー追加ガイドラインをセッションに保持
+    if "custom_guidelines" not in st.session_state:
+        st.session_state.custom_guidelines = []
+
+    # デフォルト + ユーザー追加を統合表示
+    all_guidelines = default_guidelines + st.session_state.custom_guidelines
+
+    for title, desc in all_guidelines:
         st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
         st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
+
+    # --- ガイドライン追加フォーム ---
+    st.markdown("---")
+    st.markdown("#### ➕ ガイドラインを追加")
+    with st.form("add_guideline_form", clear_on_submit=True):
+        new_title = st.text_input("チェック項目", placeholder="例: 背景に余計なものを入れない")
+        new_desc = st.text_input("補足説明（任意）", placeholder="例: 商品以外の小道具やテキストはNG")
+        submitted = st.form_submit_button("追加する", type="primary")
+        if submitted and new_title.strip():
+            st.session_state.custom_guidelines.append(
+                (new_title.strip(), new_desc.strip() if new_desc.strip() else "")
+            )
+            st.rerun()
 
 # --- メインエリア ---
 st.markdown("# 🔍 Amazon商品画像チェッカー")
