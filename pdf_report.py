@@ -151,14 +151,17 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
     # 行ごとの色分け
     for row_idx in range(1, len(table_data)):
         row = table_data[row_idx]
-        if row[-1] == "合格":
+        # Paragraphオブジェクトからテキストを取得
+        last_cell_text = row[-1].text if hasattr(row[-1], 'text') else str(row[-1])
+        if "合格" in last_cell_text:
             style_commands.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#E8F5E9")))
         else:
             style_commands.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#FFF3E0")))
 
         # 個別セルの色
         for col_idx in range(2, len(row) - 1):
-            cell_text = row[col_idx]
+            cell = row[col_idx]
+            cell_text = cell.text if hasattr(cell, 'text') else str(cell)
             if cell_text.startswith("NG"):
                 style_commands.append(("TEXTCOLOR", (col_idx, row_idx), (col_idx, row_idx), colors.red))
             elif cell_text.startswith("注意"):
