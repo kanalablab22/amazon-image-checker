@@ -381,118 +381,51 @@ for i, report in enumerate(reports):
     else:
         st.markdown("## 📸 チェック結果")
 
-    score = report.score
+    # 総合判定（一番上に表示）
     all_ok = all(r.level == "ok" for r in report.results)
     has_ng = any(r.level == "ng" for r in report.results)
+    score = report.score
 
-    # グレード判定
-    if score >= 90:
-        grade, grade_msg = "S", "素晴らしい！完璧なクオリティです"
-    elif score >= 80:
-        grade, grade_msg = "A", "合格！高品質な画像です"
-    elif score >= 70:
-        grade, grade_msg = "A-", "かなり良いサムネです！細部の改善でさらに良く"
-    elif score >= 60:
-        grade, grade_msg = "B", "惜しい！いくつかの改善で合格ラインに"
-    elif score >= 40:
-        grade, grade_msg = "C", "改善が必要な項目があります"
+    # スコア表示（カラー付き）
+    score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+    st.markdown(f"<h2 style='margin-bottom:0;'>総合スコア: <span style='color:{score_color};'>{score}点</span> / 100点 {'✅ 合格' if score >= 80 else '⚠️ 要改善'}</h2>", unsafe_allow_html=True)
+
+    if all_ok:
+        st.success("🎉 すべてのチェックをクリア！")
+    elif has_ng:
+        ng_items = [r.name for r in report.results if r.level == "ng"]
+        st.error(f"❌ 修正が必要: {', '.join(ng_items)}")
     else:
-        grade, grade_msg = "D", "大幅な改善が必要です"
+        st.warning("⚠️ 確認したほうがいい項目があります")
 
-    col_img, col_score = st.columns([1, 1])
+    col_img, col_result = st.columns([1, 1])
 
-    # 左: 画像
+    # 左: 画像（bbox赤枠付き）
     with col_img:
-        st.image(report.annotated_image, caption=f"{report.filename}", use_column_width=True)
-        st.caption(f"📐 {report.width} x {report.height} px")
+        st.image(report.annotated_image, caption=f"{report.filename} ({report.width}x{report.height}px)", use_column_width=True)
 
-    # 右: 総合スコアバナー + 項目別スコア
-    with col_score:
-        # グラデーションスコアバナー
-        if score >= 80:
-            gradient = "linear-gradient(135deg, #4CAF50, #2196F3)"
-        elif score >= 60:
-            gradient = "linear-gradient(135deg, #FF9800, #F57C00)"
-        else:
-            gradient = "linear-gradient(135deg, #F44336, #D32F2F)"
-
-        st.markdown(f"""
-        <div style="
-            background: {gradient};
-            border-radius: 16px; padding: 20px 25px; color: white; text-align: center;
-            margin-bottom: 15px;
-        ">
-            <div style="font-size: 13px; opacity: 0.9;">総合スコア</div>
-            <div style="font-size: 52px; font-weight: bold; line-height: 1.1;">{score}<span style="font-size: 18px; opacity: 0.8;"> / 100</span></div>
-            <div style="font-size: 14px; margin-top: 4px;">グレード {grade} — {grade_msg}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 項目別スコア（プログレスバー + 星）
-        st.markdown("#### 📊 項目別スコア")
+    # 右: チェック結果（カラーバー付き）
+    with col_result:
         for result in report.results:
             if result.level == "ok":
-                bar_color = "#4CAF50"
-                stars = 5
+                icon = "✅"
+                color = "#4CAF50"
                 bar_pct = 100
             elif result.level == "warn":
-                bar_color = "#FF9800"
-                stars = 3
+                icon = "⚠️"
+                color = "#FF9800"
                 bar_pct = 60
             else:
-                bar_color = "#F44336"
-                stars = 1
+                icon = "❌"
+                color = "#F44336"
                 bar_pct = 20
 
-            star_str = "★" * stars + "☆" * (5 - stars)
-            st.markdown(f"""
-            <div style="display:flex; align-items:center; margin-bottom:6px; font-size:13px;">
-                <div style="width:120px; flex-shrink:0; font-weight:500;">{result.name}</div>
-                <div style="flex:1; background:#eee; border-radius:4px; height:10px; margin:0 10px; overflow:hidden;">
-                    <div style="width:{bar_pct}%; height:100%; background:{bar_color}; border-radius:4px;"></div>
-                </div>
-                <div style="color:{bar_color}; flex-shrink:0; font-size:12px;">{star_str}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # 良い点 / 改善ポイント
-    ok_results = [r for r in report.results if r.level == "ok"]
-    bad_results = [r for r in report.results if r.level != "ok"]
-
-    col_good, col_improve = st.columns(2)
-
-    with col_good:
-        st.markdown("#### 👍 良い点")
-        if ok_results:
-            for r in ok_results:
-                st.markdown(f"""
-                <div style="background:#E8F5E9; border-left:4px solid #4CAF50; border-radius:8px; padding:10px 14px; margin-bottom:8px; font-size:13px;">
-                    ✅ <b>{r.name}</b>：{r.detail}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.caption("なし")
-
-    with col_improve:
-        st.markdown("#### 🔧 改善ポイント")
-        if bad_results:
-            for r in bad_results:
-                if r.level == "ng":
-                    bg, border, emoji = "#FFEBEE", "#F44336", "🔴 最優先"
-                else:
-                    bg, border, emoji = "#FFF8E1", "#FF9800", "🟡 改善推奨"
-                st.markdown(f"""
-                <div style="background:{bg}; border-left:4px solid {border}; border-radius:8px; padding:10px 14px; margin-bottom:8px; font-size:13px;">
-                    <b>{emoji} {r.name}</b><br>
-                    <span style="color:#555;">{r.detail}</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div style="background:#E8F5E9; border-radius:8px; padding:15px; text-align:center; font-size:14px;">
-                🎉 改善ポイントなし！素晴らしいです！
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"### {icon} {result.name}: {result.value}")
+            # カラーバー
+            st.markdown(f"""<div style="background:#eee; border-radius:4px; height:6px; margin:-8px 0 4px 0; overflow:hidden;">
+                <div style="width:{bar_pct}%; height:100%; background:{color}; border-radius:4px;"></div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: {color}; margin-top: 0;'>{result.detail}</p>", unsafe_allow_html=True)
 
     # --- コメント欄 ---
     comments = load_comments()
