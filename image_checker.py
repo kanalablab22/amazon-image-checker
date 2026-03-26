@@ -812,8 +812,8 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
     """商品bboxに赤枠を描画した画像を作成"""
     annotated = image.copy().convert("RGB")
 
-    # 大きい画像はプレビュー用にリサイズ
-    max_dim = 600
+    # 大きい画像はプレビュー用にリサイズ（品質重視で大きめに保持）
+    max_dim = 1600
     if max(annotated.size) > max_dim:
         scale = max_dim / max(annotated.size)
         new_size = (int(annotated.width * scale), int(annotated.height * scale))
@@ -830,7 +830,9 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
 
     draw = ImageDraw.Draw(annotated)
     left, top, right, bottom = bbox
-    for i in range(2):  # 2px幅の赤枠
+    # 画像サイズに応じた枠の太さ（大きい画像ほど太く）
+    line_width = max(2, min(annotated.width, annotated.height) // 300)
+    for i in range(line_width):
         draw.rectangle(
             [left - i, top - i, right + i, bottom + i],
             outline=(255, 0, 0),
