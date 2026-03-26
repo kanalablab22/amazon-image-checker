@@ -112,7 +112,7 @@ def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
     elements.append(Spacer(1, 5 * mm))
 
     # サマリーテーブル（13項目を2行で表示: Amazon公式 + 社内品質）
-    header_labels = ["ファイル名", "サイズ", "OK", "注意", "NG", "NG項目", "総合"]
+    header_labels = ["ファイル名", "サイズ", "スコア", "OK", "注意", "NG", "NG項目", "総合"]
     header = [Paragraph(h, styles["JP_Header"]) for h in header_labels]
     table_data = [header]
 
@@ -123,9 +123,11 @@ def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
         ng_items = [r.name for r in report.results if r.level == "ng"]
         all_passed = ng_count == 0 and warn_count == 0
 
+        score = report.score
         row = [
             Paragraph(report.filename, styles["JP_Small"]),
             Paragraph(f"{report.width}x{report.height}", styles["JP_Small"]),
+            Paragraph(f"{score}点", styles["JP_Small"]),
             Paragraph(f"{ok_count}", styles["JP_Small"]),
             Paragraph(f"{warn_count}", styles["JP_Small"]),
             Paragraph(f"{ng_count}", styles["JP_Small"]),
@@ -134,7 +136,7 @@ def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
         ]
         table_data.append(row)
 
-    col_widths = [45 * mm, 25 * mm, 15 * mm, 15 * mm, 15 * mm, 100 * mm, 22 * mm]
+    col_widths = [40 * mm, 23 * mm, 18 * mm, 13 * mm, 13 * mm, 13 * mm, 85 * mm, 20 * mm]
     table = Table(table_data, colWidths=col_widths)
 
     # テーブルスタイル
@@ -159,10 +161,10 @@ def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
         else:
             style_commands.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#FFF3E0")))
 
-        # NG件数セル（col 4）を赤文字に
-        ng_cell_text = row[4].text if hasattr(row[4], 'text') else str(row[4])
+        # NG件数セル（col 5）を赤文字に
+        ng_cell_text = row[5].text if hasattr(row[5], 'text') else str(row[5])
         if ng_cell_text != "0":
-            style_commands.append(("TEXTCOLOR", (4, row_idx), (4, row_idx), colors.red))
+            style_commands.append(("TEXTCOLOR", (5, row_idx), (5, row_idx), colors.red))
 
     table.setStyle(TableStyle(style_commands))
     elements.append(table)

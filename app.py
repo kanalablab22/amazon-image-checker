@@ -349,7 +349,7 @@ if len(reports) > 1:
         warn_count = sum(1 for r in report.results if r.level == "warn")
 
         status = "✅ 合格" if all_passed else f"❌ NG {ng_count}件" if ng_count else f"⚠️ 注意 {warn_count}件"
-        st.markdown(f"**`{report.filename}`** → {status}")
+        st.markdown(f"**`{report.filename}`** → **{report.score}点** {status}")
 
         # コンパクトに各チェック結果を表示
         result_text = " | ".join([
@@ -370,12 +370,17 @@ for i, report in enumerate(reports):
     # 総合判定（一番上に表示）
     all_ok = all(r.level == "ok" for r in report.results)
     has_ng = any(r.level == "ng" for r in report.results)
+    score = report.score
+
+    # スコア表示
+    score_color = "#4CAF50" if score >= 80 else "#FF9800" if score >= 60 else "#F44336"
+    st.markdown(f"<h2 style='margin-bottom:0;'>総合スコア: <span style='color:{score_color};'>{score}点</span> / 100点 {'✅ 合格' if score >= 80 else '⚠️ 要改善'}</h2>", unsafe_allow_html=True)
 
     if all_ok:
-        st.success("🎉 すべてのチェックをクリア！この画像はAmazon基準OKです")
+        st.success("🎉 すべてのチェックをクリア！")
     elif has_ng:
         ng_items = [r.name for r in report.results if r.level == "ng"]
-        st.error(f"❌ 修正が必要な項目: {', '.join(ng_items)}")
+        st.error(f"❌ 修正が必要: {', '.join(ng_items)}")
     else:
         st.warning("⚠️ 確認したほうがいい項目があります")
 

@@ -28,6 +28,22 @@ class ImageCheckReport:
     product_ratio: float
     bbox: tuple         # (left, top, right, bottom) 商品の外接矩形
     annotated_image: Image.Image  # bbox赤枠付き画像
+    score: int = 0      # 総合スコア（100点満点）
+
+    @staticmethod
+    def calc_score(results: list) -> int:
+        """チェック結果から100点満点のスコアを算出"""
+        if not results:
+            return 0
+        total = len(results)
+        points = 0
+        for r in results:
+            if r.level == "ok":
+                points += 1.0
+            elif r.level == "warn":
+                points += 0.5
+            # ng = 0
+        return round(points / total * 100)
 
 
 def _get_product_mask(image: Image.Image, threshold: int = 240) -> np.ndarray:
@@ -913,6 +929,8 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
     # bbox赤枠付き画像
     annotated = _create_annotated_image(image, bbox)
 
+    score = ImageCheckReport.calc_score(results)
+
     return ImageCheckReport(
         filename=filename,
         width=image.width,
@@ -921,4 +939,5 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
         product_ratio=(bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) / (image.width * image.height),
         bbox=bbox,
         annotated_image=annotated,
+        score=score,
     )
