@@ -505,44 +505,27 @@ with st.spinner("Amazon検索結果を取得中..."):
                 competitor_images=competitors,
             )
         with tab_sp:
-            # モバイル版HTMLを取得
+            # モバイル版HTMLを取得して直接表示（iframe不使用）
             mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # data: URL方式でiframeに読み込み（ネストHTML問題を回避）
-            mobile_b64 = base64.b64encode(mobile_html.encode('utf-8')).decode('ascii')
-            iframe_src = f"data:text/html;base64,{mobile_b64}"
+            # iPhoneフレームのCSSを注入
+            phone_css = """
+            <style>
+                html, body { margin:0; padding:0; background:#fff !important; }
+                body {
+                    width: 300px !important;
+                    margin: 0 auto !important;
+                    border-left: 8px solid #333 !important;
+                    border-right: 8px solid #333 !important;
+                    border-radius: 40px !important;
+                    overflow-x: hidden !important;
+                    box-shadow: 0 5px 20px rgba(0,0,0,0.15) !important;
+                }
+            </style>
+            """
+            mobile_html = mobile_html.replace('</head>', phone_css + '</head>')
 
-            phone_wrapper = f'''
-            <div style="display:flex; justify-content:center; background:#fff;">
-                <div style="
-                    width: 300px; height: 640px;
-                    border-radius: 45px; border: 8px solid #333;
-                    background: #333; position: relative;
-                    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
-                    overflow: hidden;
-                ">
-                    <div style="
-                        position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-                        width: 120px; height: 28px;
-                        background: #333; border-radius: 0 0 18px 18px; z-index: 10;
-                    "></div>
-                    <div style="
-                        width: 100%; height: 100%;
-                        border-radius: 37px; overflow: hidden; background: #fff;
-                    ">
-                        <iframe src="{iframe_src}"
-                            style="width:100%; height:100%; border:none;"
-                            sandbox="allow-same-origin">
-                        </iframe>
-                    </div>
-                    <div style="
-                        position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
-                        width:100px; height:4px; background:#666; border-radius:2px;
-                    "></div>
-                </div>
-            </div>'''
-
-            components.html(phone_wrapper, height=680)
+            components.html(mobile_html, height=700, scrolling=True)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
