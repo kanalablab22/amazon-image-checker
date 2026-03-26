@@ -101,3 +101,81 @@ def fetch_amazon_search_html(keyword: str, user_image: Image.Image, position: in
 
     except Exception as e:
         return f"<html><body><p>検索結果の取得に失敗しました: {e}</p></body></html>"
+
+
+def fetch_amazon_mobile_html(keyword: str, user_image: Image.Image, position: int = 5) -> str:
+    """
+    Amazon.co.jpのモバイル版検索結果HTMLを取得し、position番目の商品画像を差し替える
+    """
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "Accept-Language": "ja-JP,ja;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    session.headers.update(headers)
+
+    try:
+        session.get("https://www.amazon.co.jp/", timeout=10)
+
+        encoded = urllib.parse.quote(keyword)
+        url = f"https://www.amazon.co.jp/s?k={encoded}"
+        resp = session.get(url, timeout=10)
+        resp.raise_for_status()
+        html = resp.text
+
+        # ユーザー画像をbase64に変換
+        buf = BytesIO()
+        user_image.convert("RGB").save(buf, format="JPEG", quality=90)
+        user_b64 = base64.b64encode(buf.getvalue()).decode()
+        user_data_url = f"data:image/jpeg;base64,{user_b64}"
+
+        # 商品画像のURLを差し替え
+        img_pattern = r'(https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\.(?:jpg|png))'
+        matches = list(re.finditer(img_pattern, html))
+
+        seen_bases = set()
+        product_count = 0
+        target_url = None
+
+        for m in matches:
+            img_url = m.group(1)
+            base_match = re.search(r'/I/([A-Za-z0-9+_]+)', img_url)
+            if not base_match:
+                continue
+            base_id = base_match.group(1)
+            if base_id in seen_bases:
+                continue
+            seen_bases.add(base_id)
+            product_count += 1
+
+            if product_count == position:
+                target_url = base_id
+                break
+
+        if target_url:
+            html = re.sub(
+                rf'https://m\.media-amazon\.com/images/I/{re.escape(target_url)}[A-Za-z0-9._-]*\.(?:jpg|png)',
+                user_data_url,
+                html
+            )
+
+        # URL修正
+        html = html.replace('href="/', 'href="https://www.amazon.co.jp/')
+        html = html.replace("href='/", "href='https://www.amazon.co.jp/")
+        html = html.replace('<a ', '<a onclick="return false;" ')
+
+        # モバイル用スタイル調整
+        style_inject = """
+        <style>
+            body { margin: 0; padding: 0; overflow-x: hidden; font-size: 14px; }
+            * { max-width: 100% !important; }
+            #nav-belt, #nav-main, .nav-footer, #rhf { display: none !important; }
+        </style>
+        """
+        html = html.replace('</head>', style_inject + '</head>')
+
+        return html
+
+    except Exception as e:
+        return f"<html><body><p>取得失敗: {e}</p></body></html>"

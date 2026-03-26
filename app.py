@@ -12,7 +12,7 @@ from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
 from amazon_search_sim import create_search_simulation, fetch_amazon_thumbnails
-from amazon_html_sim import fetch_amazon_search_html
+from amazon_html_sim import fetch_amazon_search_html, fetch_amazon_mobile_html
 import streamlit.components.v1 as components
 
 # --- カスタムデータの永続化（GitHub API / 汎用） ---
@@ -505,48 +505,21 @@ with st.spinner("Amazon検索結果を取得中..."):
                 competitor_images=competitors,
             )
         with tab_sp:
-            # 全画像をbase64に変換
-            def _img_to_b64(img):
-                buf = BytesIO()
-                img.convert("RGB").save(buf, format="JPEG", quality=85)
-                return base64.b64encode(buf.getvalue()).decode()
+            # モバイル版HTMLを取得
+            mobile_html = fetch_amazon_mobile_html(target_keyword, user_img, position=5)
 
-            # ユーザー画像 + 競合画像をリスト化
-            all_imgs = list(competitors[:7])
-            insert_pos = min(4, len(all_imgs))  # 5番目
-            all_imgs.insert(insert_pos, user_img)
+            # iPhoneフレームの中にiframeで実HTMLを表示
+            # srcdocでHTML全体を埋め込み
+            mobile_b64 = base64.b64encode(mobile_html.encode("utf-8")).decode("utf-8")
 
-            # 商品カードHTML生成（2列グリッド）
-            cards_html = ""
-            for idx, img in enumerate(all_imgs):
-                b64 = _img_to_b64(img)
-                cards_html += f'''
-                <div style="background:#fff; border:1px solid #eee; border-radius:4px; overflow:hidden;">
-                    <div style="padding:8px; display:flex; justify-content:center; align-items:center; height:120px; background:#fff;">
-                        <img src="data:image/jpeg;base64,{b64}"
-                             style="max-width:100%; max-height:110px; object-fit:contain;">
-                    </div>
-                    <div style="padding:6px 8px;">
-                        <div style="background:#ddd; height:8px; width:90%; border-radius:2px; margin-bottom:4px;"></div>
-                        <div style="background:#ddd; height:8px; width:60%; border-radius:2px; margin-bottom:6px;"></div>
-                        <div style="color:#B12704; font-weight:bold; font-size:14px;">¥X,XXX</div>
-                        <div style="margin-top:2px;">
-                            <span style="color:#FF9900; font-size:11px;">★★★★☆</span>
-                            <span style="font-size:10px; color:#888;">(XX)</span>
-                        </div>
-                    </div>
-                </div>'''
-
-            # iPhoneフレーム HTML
             phone_html = f'''
             <div style="display:flex; justify-content:center;">
                 <div style="
                     width: 300px;
-                    height: 620px;
+                    height: 640px;
                     border-radius: 45px;
                     border: 8px solid #1a1a1a;
                     background: #1a1a1a;
-                    padding: 0;
                     position: relative;
                     box-shadow: 0 10px 40px rgba(0,0,0,0.3);
                     overflow: hidden;
@@ -564,33 +537,11 @@ with st.spinner("Amazon検索結果を取得中..."):
                         overflow: hidden;
                         background: #fff;
                     ">
-                        <!-- ステータスバー -->
-                        <div style="height:48px; background:#232F3E; display:flex; align-items:center; padding:0 15px;">
-                            <div style="color:white; font-size:11px; margin-top:16px;">9:41</div>
-                            <div style="flex:1;"></div>
-                            <div style="color:white; font-size:11px; margin-top:16px;">📶 🔋</div>
-                        </div>
-                        <!-- Amazon検索バー -->
-                        <div style="background:#232F3E; padding:5px 12px 10px;">
-                            <div style="background:white; border-radius:8px; padding:7px 12px; font-size:13px; color:#333;">
-                                🔍 {target_keyword}
-                            </div>
-                        </div>
-                        <!-- 検索結果（2列グリッド・スクロール可能） -->
-                        <div style="
-                            height: calc(100% - 100px);
-                            overflow-y: auto;
-                            -webkit-overflow-scrolling: touch;
-                            padding: 6px;
-                        ">
-                            <div style="
-                                display: grid;
-                                grid-template-columns: 1fr 1fr;
-                                gap: 6px;
-                            ">
-                                {cards_html}
-                            </div>
-                        </div>
+                        <iframe
+                            srcdoc='{mobile_html.replace(chr(39), "&#39;")}'
+                            style="width:100%; height:100%; border:none;"
+                            sandbox="allow-same-origin"
+                        ></iframe>
                     </div>
                     <!-- ホームバー -->
                     <div style="
@@ -600,7 +551,7 @@ with st.spinner("Amazon検索結果を取得中..."):
                 </div>
             </div>'''
 
-            components.html(phone_html, height=660)
+            components.html(phone_html, height=680)
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
