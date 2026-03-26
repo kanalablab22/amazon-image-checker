@@ -219,8 +219,9 @@ with st.sidebar:
     st.caption("良い画像のポイントをチームで共有")
 
     ok_examples = load_examples("ok")
-    # ブランドでフィルタ
+    # ブランドでフィルタ＆ブランド名でソート
     filtered_ok = [ex for ex in ok_examples if selected_brand == "すべて" or ex.get("brand", "") == selected_brand]
+    filtered_ok = sorted(filtered_ok, key=lambda x: x.get("brand", ""))
 
     if not filtered_ok and selected_brand != "すべて":
         st.caption(f"📭 {selected_brand} のOK例はまだありません")
@@ -255,6 +256,7 @@ with st.sidebar:
 
     ng_examples = load_examples("ng")
     filtered_ng = [ex for ex in ng_examples if selected_brand == "すべて" or ex.get("brand", "") == selected_brand]
+    filtered_ng = sorted(filtered_ng, key=lambda x: x.get("brand", ""))
 
     if not filtered_ng and selected_brand != "すべて":
         st.caption(f"📭 {selected_brand} のNG例はまだありません")
