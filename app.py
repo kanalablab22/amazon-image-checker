@@ -379,8 +379,8 @@ for i, report in enumerate(reports):
                 icon = "❌"
                 color = "red"
 
-            st.markdown(f"### {icon} {result.name}: {result.value}")
-            st.markdown(f"<p style='color: {color}; margin-top: -10px;'>{result.detail}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size: 0.95em; font-weight: bold; margin-bottom: 2px;'>{icon} {result.name}: {result.value}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: {color}; margin-top: -4px; margin-bottom: 12px; font-size: 0.8em;'>{result.detail}</p>", unsafe_allow_html=True)
 
         # 総合判定
         st.divider()
