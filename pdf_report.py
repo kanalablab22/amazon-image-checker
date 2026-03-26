@@ -79,14 +79,17 @@ def _pil_to_rl_image(pil_image: Image.Image, max_width: float = 80 * mm, max_hei
     return RLImage(buf, width=display_w, height=display_h)
 
 
-def generate_pdf_report(reports, original_images=None) -> bytes:
+def generate_pdf_report(reports, original_images=None, comments=None) -> bytes:
     """
     チェック結果のPDFレポートを生成
     Args:
         reports: ImageCheckReport のリスト
         original_images: PIL Image のリスト（元画像）
+        comments: dict - ファイル名→コメントリスト
     Returns: PDF bytes
     """
+    if comments is None:
+        comments = {}
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -210,6 +213,17 @@ def generate_pdf_report(reports, original_images=None) -> bytes:
         ]))
 
         elements.append(layout_table)
+
+        # コメント表示
+        file_comments = comments.get(report.filename, [])
+        if file_comments:
+            elements.append(Spacer(1, 2 * mm))
+            comment_texts = "　/　".join([c.get("text", "") for c in file_comments])
+            elements.append(Paragraph(
+                f"💬 コメント: {comment_texts}",
+                styles["JP_Small"],
+            ))
+
         elements.append(Spacer(1, 6 * mm))
 
     # フッター: ガイドライン参照

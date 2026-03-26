@@ -451,7 +451,10 @@ with st.spinner("PDF生成中..."):
         uploaded_file.seek(0)
         original_images.append(Image.open(uploaded_file))
 
-    pdf_bytes = generate_pdf_report(reports, original_images)
+    all_comments = load_comments()
+    if not isinstance(all_comments, dict):
+        all_comments = {}
+    pdf_bytes = generate_pdf_report(reports, original_images, comments=all_comments)
 
 st.download_button(
     label="📥 PDFレポートをダウンロード",
