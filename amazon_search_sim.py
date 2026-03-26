@@ -4,11 +4,61 @@ Amazon検索結果シミュレーション
 5番目にユーザーの商品画像を挿入したシミュレーション画像を生成する
 """
 
+import os
 import requests
 import re
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import urllib.parse
+
+# フォントキャッシュ
+_font_cache = {}
+
+def _get_japanese_font(size: int) -> ImageFont.FreeTypeFont:
+    """日本語フォントを取得（Noto Sans JPをダウンロード）"""
+    if size in _font_cache:
+        return _font_cache[size]
+
+    # ローカルのフォントを試す（macOS）
+    local_fonts = [
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    ]
+    for path in local_fonts:
+        try:
+            font = ImageFont.truetype(path, size)
+            _font_cache[size] = font
+            return font
+        except Exception:
+            continue
+
+    # Noto Sans JPをダウンロード（Streamlit Cloud用）
+    font_dir = os.path.join(os.path.dirname(__file__), ".fonts")
+    font_path = os.path.join(font_dir, "NotoSansJP-Regular.ttf")
+
+    if not os.path.exists(font_path):
+        os.makedirs(font_dir, exist_ok=True)
+        try:
+            url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf"
+            resp = requests.get(url, timeout=15)
+            if resp.status_code == 200:
+                with open(font_path, "wb") as f:
+                    f.write(resp.content)
+        except Exception:
+            pass
+
+    if os.path.exists(font_path):
+        try:
+            font = ImageFont.truetype(font_path, size)
+            _font_cache[size] = font
+            return font
+        except Exception:
+            pass
+
+    # 最終フォールバック
+    font = ImageFont.load_default()
+    _font_cache[size] = font
+    return font
 
 
 def fetch_amazon_thumbnails(keyword: str, count: int = 8) -> list:
@@ -157,21 +207,11 @@ def create_search_simulation(
         fill=(255, 255, 255),
     )
 
-    # 検索テキスト
-    try:
-        font_small = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 14)
-        font_label = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 11)
-        font_header = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc", 14)
-    except Exception:
-        font_small = ImageFont.load_default()
-        font_label = ImageFont.load_default()
-        font_header = font_small
+    # フォント（Noto Sans JP をダウンロード or フォールバック）
+    font_small = _get_japanese_font(14)
+    font_label = _get_japanese_font(11)
 
     draw.text((bar_x + 10, bar_y + 10), keyword, fill=(0, 0, 0), font=font_small)
-
-    # 検索結果ラベル
-    result_label = f'"{keyword}" の検索結果シミュレーション'
-    draw.text((padding, header_height + 5), result_label, fill=(100, 100, 100), font=font_label)
 
     # 画像を配置用リストに整列
     all_items = list(competitor_images)
@@ -192,21 +232,15 @@ def create_search_simulation(
 
         if is_user:
             img = item[1]
-            # ユーザー画像のハイライト枠
-            draw.rectangle(
-                [x, y, x + cell_w - padding, y + cell_h - 5],
-                outline=(255, 153, 0),  # Amazonオレンジ
-                width=3,
-            )
-            border_color = (255, 153, 0)
         else:
             img = item
-            draw.rectangle(
-                [x, y, x + cell_w - padding, y + cell_h - 5],
-                outline=(230, 230, 230),
-                width=1,
-            )
-            border_color = None
+
+        # 全商品同じ枠線（区別しない）
+        draw.rectangle(
+            [x, y, x + cell_w - padding, y + cell_h - 5],
+            outline=(230, 230, 230),
+            width=1,
+        )
 
         # 画像をリサイズしてセンタリング
         img_rgb = img.convert("RGB") if img.mode != "RGB" else img
@@ -215,19 +249,10 @@ def create_search_simulation(
         paste_y = y + (thumb_size - img_rgb.height) // 2 + padding // 2
         canvas.paste(img_rgb, (paste_x, paste_y))
 
-        # ラベル
-        if is_user:
-            label_y = y + cell_h - label_height - 5
-            draw.rectangle(
-                [x + 2, label_y, x + cell_w - padding - 2, label_y + 20],
-                fill=(255, 153, 0),
-            )
-            draw.text((x + 8, label_y + 3), "▶ あなたの商品", fill=(255, 255, 255), font=font_label)
-        else:
-            # 競合のダミー価格ライン
-            price_y = y + cell_h - label_height - 5
-            draw.rectangle([x + 5, price_y + 2, x + 60, price_y + 4], fill=(200, 200, 200))
-            draw.rectangle([x + 5, price_y + 10, x + 100, price_y + 12], fill=(220, 220, 220))
+        # ダミー価格ライン（全商品共通）
+        price_y = y + cell_h - label_height - 5
+        draw.rectangle([x + 5, price_y + 2, x + 60, price_y + 4], fill=(200, 200, 200))
+        draw.rectangle([x + 5, price_y + 10, x + 100, price_y + 12], fill=(220, 220, 220))
 
     # 競合が取得できなかった場合のプレースホルダー
     if len(all_items) < total_items:

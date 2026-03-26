@@ -461,7 +461,7 @@ for i, report in enumerate(reports):
 # --- 検索結果シミュレーション ---
 st.markdown("---")
 st.markdown("## 🔍 検索結果シミュレーション")
-st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ（5番目にあなたの商品を配置）")
+st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ")
 
 # 最初の画像を使ってシミュレーション
 with st.spinner("Amazon検索結果を取得中..."):
@@ -472,7 +472,6 @@ with st.spinner("Amazon検索結果を取得中..."):
             position=5,
         )
         st.image(sim_image, use_column_width=True)
-        st.caption("🟧 オレンジ枠 = あなたの商品画像。競合の中でどう見えるかチェック！")
     except Exception as e:
         st.warning(f"検索結果の取得に失敗しました: {e}")
         st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
