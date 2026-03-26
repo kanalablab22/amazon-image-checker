@@ -12,6 +12,7 @@ from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
 from amazon_search_sim import create_search_simulation, fetch_amazon_thumbnails
+from amazon_html_sim import fetch_amazon_search_html
 import streamlit.components.v1 as components
 
 # --- カスタムデータの永続化（GitHub API / 汎用） ---
@@ -488,21 +489,22 @@ with st.spinner("Amazon検索結果を取得中..."):
     try:
         uploaded_files[0].seek(0)
         user_img = Image.open(uploaded_files[0])
-        # 競合画像を1回だけ取得してPC/スマホで共有
-        competitors = fetch_amazon_thumbnails(target_keyword, count=14)
 
-        col_pc, col_sp = st.columns([3, 2])
-        with col_pc:
-            st.markdown("**🖥️ PC版**")
+        tab_pc, tab_sp = st.tabs(["🖥️ PC版", "📱 スマホ版"])
+        with tab_pc:
+            # Amazon検索結果HTMLを丸ごと取得して商品画像を差し替え
+            amazon_html = fetch_amazon_search_html(target_keyword, user_img, position=5)
+            components.html(amazon_html, height=800, scrolling=True)
+
+            # PDF用にサムネグリッドも生成（非表示）
+            competitors = fetch_amazon_thumbnails(target_keyword, count=14)
             sim_pc = create_search_simulation(
                 keyword=target_keyword,
                 user_image=user_img,
                 position=5,
                 competitor_images=competitors,
             )
-            st.image(sim_pc, use_column_width=True)
-        with col_sp:
-            st.markdown("**📱 スマホ版**")
+        with tab_sp:
             # 全画像をbase64に変換
             def _img_to_b64(img):
                 buf = BytesIO()
