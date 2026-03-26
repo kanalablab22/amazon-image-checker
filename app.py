@@ -28,8 +28,8 @@ def _has_github_secrets() -> bool:
     except Exception:
         return False
 
-def _load_data(filename: str) -> list:
-    """GitHub（data branch）またはローカルからJSONリストを読み込む"""
+def _load_data(filename: str):
+    """GitHub（data branch）またはローカルからJSONを読み込む"""
     if _has_github_secrets():
         try:
             repo = _github_repo()
@@ -50,8 +50,8 @@ def _load_data(filename: str) -> list:
             pass
     return []
 
-def _save_data(filename: str, data: list, commit_msg: str = "データ更新"):
-    """GitHub（data branch）+ ローカルにJSONリストを保存"""
+def _save_data(filename: str, data, commit_msg: str = "データ更新"):
+    """GitHub（data branch）+ ローカルにJSONを保存"""
     # ローカル保存（常に）
     local_path = os.path.join(os.path.dirname(__file__), filename)
     try:
@@ -98,6 +98,13 @@ def load_examples(kind: str) -> list:
 def save_examples(kind: str, examples: list):
     label = "OK例集" if kind == "ok" else "NG例集"
     _save_data(f"examples_{kind}.json", examples, f"{label}更新")
+
+def load_comments() -> dict:
+    """画像ごとのコメントを読み込む"""
+    return _load_data("comments.json") or {}
+
+def save_comments(comments: dict):
+    _save_data("comments.json", comments, "コメント更新")
 
 st.set_page_config(
     page_title="Amazon画像チェッカー",
@@ -394,6 +401,44 @@ for i, report in enumerate(reports):
             st.error(f"❌ 修正が必要な項目: {', '.join(ng_items)}")
         else:
             st.warning("⚠️ 確認したほうがいい項目があります")
+
+        # --- コメント欄 ---
+        comments = load_comments()
+        if not isinstance(comments, dict):
+            comments = {}
+        file_key = report.filename
+        file_comments = comments.get(file_key, [])
+
+        if file_comments:
+            st.markdown("**💬 コメント**")
+            for ci, c in enumerate(file_comments):
+                col_comment, col_del = st.columns([20, 1])
+                with col_comment:
+                    st.markdown(f"<span style='font-size:0.9em;'>**{c.get('name', '匿名')}**: {c.get('text', '')}</span>", unsafe_allow_html=True)
+                with col_del:
+                    if st.button("×", key=f"del_comment_{i}_{ci}",
+                                 help="削除",
+                                 type="secondary"):
+                        file_comments.pop(ci)
+                        comments[file_key] = file_comments
+                        save_comments(comments)
+                        st.rerun()
+
+        with st.expander("💬 コメントを追加", expanded=False):
+            commenter = st.text_input("名前", key=f"commenter_{i}", placeholder="例: 田中")
+            comment_text = st.text_area("コメント", key=f"comment_text_{i}", placeholder="例: 影をもう少し強くしたほうが良さそう", height=80)
+            if st.button("💾 保存", key=f"save_comment_{i}"):
+                if comment_text.strip():
+                    file_comments.append({
+                        "name": commenter.strip() or "匿名",
+                        "text": comment_text.strip()
+                    })
+                    comments[file_key] = file_comments
+                    save_comments(comments)
+                    st.success("コメントを保存しました！")
+                    st.rerun()
+                else:
+                    st.warning("コメントを入力してください")
 
     if i < len(reports) - 1:
         st.markdown("---")
