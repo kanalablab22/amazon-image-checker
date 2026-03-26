@@ -11,6 +11,7 @@ from PIL import Image
 from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
+from amazon_search_sim import create_search_simulation
 
 # --- カスタムデータの永続化（GitHub API / 汎用） ---
 import os
@@ -319,6 +320,18 @@ with st.expander("📌 **画像の技術的要件（Amazon公式）**", expanded
 - **禁止**: テキスト、ロゴ、透かし等なし
         """)
 
+# --- キーワード入力（必須） ---
+st.markdown("### 🔍 狙っているキーワード")
+target_keyword = st.text_input(
+    "この商品が狙っているAmazon検索キーワードを入力してください（必須）",
+    placeholder="例: 本革 カードケース レディース",
+    key="target_keyword",
+)
+
+if not target_keyword.strip():
+    st.warning("⬆️ まずキーワードを入力してください")
+    st.stop()
+
 # ファイルアップロード
 uploaded_files = st.file_uploader(
     "画像をドラッグ＆ドロップ（複数枚OK）",
@@ -444,6 +457,25 @@ for i, report in enumerate(reports):
 
     if i < len(reports) - 1:
         st.markdown("---")
+
+# --- 検索結果シミュレーション ---
+st.markdown("---")
+st.markdown("## 🔍 検索結果シミュレーション")
+st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ（5番目にあなたの商品を配置）")
+
+# 最初の画像を使ってシミュレーション
+with st.spinner("Amazon検索結果を取得中..."):
+    try:
+        sim_image = create_search_simulation(
+            keyword=target_keyword,
+            user_image=Image.open(uploaded_files[0]),
+            position=5,
+        )
+        st.image(sim_image, use_column_width=True)
+        st.caption("🟧 オレンジ枠 = あなたの商品画像。競合の中でどう見えるかチェック！")
+    except Exception as e:
+        st.warning(f"検索結果の取得に失敗しました: {e}")
+        st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
 
 # --- PDFレポート ---
 st.markdown("---")
