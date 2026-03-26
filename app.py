@@ -62,6 +62,25 @@ with st.sidebar:
 st.markdown("# 🔍 Amazon商品画像チェッカー")
 st.markdown("作成した商品画像をアップロードすると、Amazonガイドラインに基づいて自動チェックします")
 
+with st.expander("📌 **チェック項目まとめ**", expanded=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**🏷️ Amazon公式基準**")
+        st.markdown("""
+- 白背景（RGB 255,255,255）
+- 画像の85%を商品が占める
+- 長辺500px〜10,000px
+- テキスト・ロゴ・透かしなし
+        """)
+    with col2:
+        st.markdown("**🏢 社内ガイドライン**")
+        st.markdown("""
+- 余白を減らして商品を大きく
+- ドロップシャドウ・鏡面反射で高級感
+- 暗くてどんよりしない明るさ
+- 検索結果で目立つ画像に
+        """)
+
 # ファイルアップロード
 uploaded_files = st.file_uploader(
     "画像をドラッグ＆ドロップ（複数枚OK）",
