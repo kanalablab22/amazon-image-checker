@@ -809,7 +809,7 @@ def check_lighting_direction(image: Image.Image, mask: np.ndarray, bbox: tuple) 
 
 
 def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
-    """商品bboxに赤枠を描画した画像を作成"""
+    """商品bboxに赤枠を描画した画像を作成（余白付きで見切れ防止）"""
     annotated = image.copy().convert("RGB")
 
     # 大きい画像はプレビュー用にリサイズ（品質重視で大きめに保持）
@@ -828,9 +828,22 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
             int(bottom * scale),
         )
 
-    draw = ImageDraw.Draw(annotated)
+    # 画像の周りに白い余白を追加（赤枠が端に寄りすぎないように）
+    padding = max(15, min(annotated.width, annotated.height) // 30)
+    padded = Image.new("RGB",
+        (annotated.width + padding * 2, annotated.height + padding * 2),
+        (255, 255, 255))
+    padded.paste(annotated, (padding, padding))
+
+    # bboxもパディング分ずらす
     left, top, right, bottom = bbox
-    # 画像サイズに応じた枠の太さ（大きい画像ほど太く）
+    left += padding
+    top += padding
+    right += padding
+    bottom += padding
+
+    draw = ImageDraw.Draw(padded)
+    # 画像サイズに応じた枠の太さ
     line_width = max(2, min(annotated.width, annotated.height) // 300)
     for i in range(line_width):
         draw.rectangle(
@@ -838,7 +851,7 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
             outline=(255, 0, 0),
         )
 
-    return annotated
+    return padded
 
 
 def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckReport:
