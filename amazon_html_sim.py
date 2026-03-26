@@ -173,41 +173,37 @@ def fetch_amazon_mobile_html(keyword: str, user_image: Image.Image, position: in
         # モバイル用スタイル調整（2列グリッド強制）
         style_inject = """
         <style>
-            body { margin: 0; padding: 0; overflow-x: hidden; font-size: 13px; }
-            * { max-width: 100% !important; }
+            *, *::before, *::after { box-sizing: border-box !important; max-width: 100% !important; }
+            html, body { margin: 0; padding: 0; overflow-x: hidden !important; width: 100% !important; font-size: 13px; }
             #nav-belt, #nav-main, .nav-footer, #rhf,
-            .s-mobile-toolbar, #s-skipTo { display: none !important; }
+            .s-mobile-toolbar, #s-skipTo, #navbar-main { display: none !important; }
 
             /* 検索結果を2列グリッドに強制 */
+            .s-main-slot,
+            .s-search-results {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 4px !important;
+                padding: 4px !important;
+                width: 100% !important;
+            }
             .s-main-slot > .s-result-item,
             .s-search-results > .s-result-item,
             [data-component-type="s-search-result"] {
-                display: inline-block !important;
-                width: 48% !important;
-                vertical-align: top !important;
-                margin: 1% !important;
-                box-sizing: border-box !important;
-            }
-            .s-main-slot,
-            .s-search-results {
-                display: block !important;
-                font-size: 0 !important;
-            }
-            .s-main-slot > *,
-            .s-search-results > * {
-                font-size: 13px !important;
+                width: 100% !important;
+                margin: 0 !important;
+                overflow: hidden !important;
             }
             /* 商品画像を中央寄せ */
             .s-image {
                 display: block !important;
                 margin: 0 auto !important;
-                max-height: 140px !important;
+                max-height: 160px !important;
                 width: auto !important;
             }
             /* 広告バナーは全幅 */
-            .AdHolder, .s-result-item[data-component-type="sp-sponsored-result"] {
-                width: 100% !important;
-                display: block !important;
+            .AdHolder, [data-component-type="sp-sponsored-result"] {
+                grid-column: 1 / -1 !important;
             }
         </style>
         """
