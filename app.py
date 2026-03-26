@@ -4,10 +4,30 @@ Amazon商品画像チェッカー
 """
 
 import streamlit as st
+import json
+import os
 from PIL import Image
 from io import BytesIO
 from image_checker import check_image, ImageCheckReport
 from pdf_report import generate_pdf_report
+
+# --- カスタムガイドラインの永続化 ---
+CUSTOM_GUIDELINES_FILE = os.path.join(os.path.dirname(__file__), "custom_guidelines.json")
+
+def load_custom_guidelines() -> list:
+    """保存済みのカスタムガイドラインを読み込む"""
+    if os.path.exists(CUSTOM_GUIDELINES_FILE):
+        try:
+            with open(CUSTOM_GUIDELINES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return []
+    return []
+
+def save_custom_guidelines(guidelines: list):
+    """カスタムガイドラインをファイルに保存"""
+    with open(CUSTOM_GUIDELINES_FILE, "w", encoding="utf-8") as f:
+        json.dump(guidelines, f, ensure_ascii=False, indent=2)
 
 st.set_page_config(
     page_title="Amazon画像チェッカー",
@@ -49,18 +69,17 @@ with st.sidebar:
         ("細部にこだわる", "光の感じ、立体感、木や布の質感を追求"),
     ]
 
-    # ユーザー追加ガイドラインをセッションに保持
-    if "custom_guidelines" not in st.session_state:
-        st.session_state.custom_guidelines = []
+    # ユーザー追加ガイドラインをファイルから読み込み
+    custom_guidelines = load_custom_guidelines()
 
     # デフォルト + ユーザー追加を統合表示
-    all_guidelines = default_guidelines + st.session_state.custom_guidelines
+    all_guidelines = default_guidelines + [(g["title"], g["desc"]) for g in custom_guidelines]
 
     for title, desc in all_guidelines:
         st.checkbox(f"**{title}**", value=False, key=f"internal_{title}")
         st.markdown(f"<p style='margin-top: -15px; margin-bottom: 8px; padding-left: 32px; font-size: 0.78em; color: #888;'>{desc}</p>", unsafe_allow_html=True)
 
-    # --- ガイドライン追加フォーム ---
+    # --- ガイドライン追加・削除 ---
     st.markdown("---")
     st.markdown("#### ➕ ガイドラインを追加")
     with st.form("add_guideline_form", clear_on_submit=True):
@@ -68,10 +87,25 @@ with st.sidebar:
         new_desc = st.text_input("補足説明（任意）", placeholder="例: 商品以外の小道具やテキストはNG")
         submitted = st.form_submit_button("追加する", type="primary")
         if submitted and new_title.strip():
-            st.session_state.custom_guidelines.append(
-                (new_title.strip(), new_desc.strip() if new_desc.strip() else "")
-            )
+            custom_guidelines.append({
+                "title": new_title.strip(),
+                "desc": new_desc.strip() if new_desc.strip() else "",
+            })
+            save_custom_guidelines(custom_guidelines)
             st.rerun()
+
+    # カスタムガイドラインの削除ボタン
+    if custom_guidelines:
+        st.markdown("#### 🗑️ 追加したガイドラインを削除")
+        for i, g in enumerate(custom_guidelines):
+            col_del_text, col_del_btn = st.columns([4, 1])
+            with col_del_text:
+                st.caption(g["title"])
+            with col_del_btn:
+                if st.button("✕", key=f"del_guide_{i}"):
+                    custom_guidelines.pop(i)
+                    save_custom_guidelines(custom_guidelines)
+                    st.rerun()
 
 # --- メインエリア ---
 st.markdown("# 🔍 Amazon商品画像チェッカー")
