@@ -230,7 +230,7 @@ with st.sidebar:
                 desc_part = f' <span style="font-size:0.78em;color:#888;">— {ex["desc"]}</span>' if ex.get("desc") else ""
                 st.markdown(f"**・{ex['title']}**{desc_part}", unsafe_allow_html=True)
             with col_del:
-                if st.button("🗑️", key=f"del_ok_{orig_idx}"):
+                if st.button("✕", key=f"del_ok_{orig_idx}", help="削除"):
                     ok_examples.pop(orig_idx)
                     save_examples("ok", ok_examples)
                     st.rerun()
@@ -248,7 +248,7 @@ with st.sidebar:
                 desc_part = f' <span style="font-size:0.78em;color:#888;">— {ex["desc"]}</span>' if ex.get("desc") else ""
                 st.markdown(f"**・{ex['title']}**{desc_part}", unsafe_allow_html=True)
             with col_del:
-                if st.button("🗑️", key=f"del_ng_{orig_idx}"):
+                if st.button("✕", key=f"del_ng_{orig_idx}", help="削除"):
                     ng_examples.pop(orig_idx)
                     save_examples("ng", ng_examples)
                     st.rerun()
