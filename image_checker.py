@@ -828,8 +828,17 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
             int(bottom * scale),
         )
 
-    # 画像の周りに白い余白を追加（赤枠が端に寄りすぎないように）
-    padding = max(80, min(annotated.width, annotated.height) // 4)
+    # 赤枠を商品から少し離す（マージン）
+    bbox_margin = max(10, min(annotated.width, annotated.height) // 30)
+    left, top, right, bottom = bbox
+    left = max(0, left - bbox_margin)
+    top = max(0, top - bbox_margin)
+    right = min(annotated.width, right + bbox_margin)
+    bottom = min(annotated.height, bottom + bbox_margin)
+    bbox = (left, top, right, bottom)
+
+    # 画像の周りに白い余白を追加
+    padding = max(30, min(annotated.width, annotated.height) // 15)
     padded = Image.new("RGB",
         (annotated.width + padding * 2, annotated.height + padding * 2),
         (255, 255, 255))
