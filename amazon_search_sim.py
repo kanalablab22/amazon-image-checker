@@ -14,58 +14,86 @@ import urllib.parse
 def fetch_amazon_thumbnails(keyword: str, count: int = 8) -> list:
     """
     Amazon.co.jpでキーワード検索し、商品サムネイル画像URLを取得する
+    セッションを使ってCookieを取得してからアクセスする
     Returns: PIL Image のリスト
     """
-    encoded = urllib.parse.quote(keyword)
-    url = f"https://www.amazon.co.jp/s?k={encoded}"
+    session = requests.Session()
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
     }
+    session.headers.update(headers)
 
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        # まずトップページにアクセスしてCookieを取得
+        session.get("https://www.amazon.co.jp/", timeout=10)
+
+        # 検索実行
+        encoded = urllib.parse.quote(keyword)
+        search_url = f"https://www.amazon.co.jp/s?k={encoded}"
+        resp = session.get(search_url, timeout=10)
         resp.raise_for_status()
         html = resp.text
 
-        # 商品画像URLを抽出（Amazon検索結果のサムネイル）
-        # data-image-sourceで高画質サムネを取得
+        # 商品画像URLを幅広いパターンで抽出
         patterns = [
-            r'"https://m\.media-amazon\.com/images/I/[^"]+\._AC_UL320_\.jpg"',
-            r'"https://m\.media-amazon\.com/images/I/[^"]+\._AC_UL400_\.jpg"',
-            r'"https://m\.media-amazon\.com/images/I/[^"]+\._AC_UL200_\.jpg"',
-            r'"https://m\.media-amazon\.com/images/I/[^"]+\._AC_SX[0-9]+_\.jpg"',
-            r'"https://m\.media-amazon\.com/images/I/[^"]+\._AC_SR[0-9,]+_\.jpg"',
+            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\._AC_UL[0-9]+_\.jpg',
+            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\._AC_SX[0-9]+_\.jpg',
+            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\._AC_SR[0-9,]+_\.jpg',
+            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\._AC_US[0-9]+_\.jpg',
+            r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\._SS[0-9]+_\.jpg',
         ]
 
         image_urls = []
         for pattern in patterns:
             matches = re.findall(pattern, html)
-            for m in matches:
-                clean_url = m.strip('"')
-                if clean_url not in image_urls:
-                    image_urls.append(clean_url)
-            if len(image_urls) >= count + 5:
+            for url in matches:
+                if url not in image_urls:
+                    image_urls.append(url)
+            if len(image_urls) >= count + 10:
                 break
+
+        # パターンマッチしなかった場合、汎用パターンで再試行
+        if not image_urls:
+            generic = re.findall(
+                r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9+_.-]+\.jpg',
+                html
+            )
+            for url in generic:
+                # アイコンやロゴを除外（小さすぎる画像名）
+                if len(url.split("/")[-1]) > 15 and url not in image_urls:
+                    image_urls.append(url)
 
         # 画像をダウンロード
         images = []
-        seen = set()
+        seen_bases = set()
         for img_url in image_urls:
             if len(images) >= count:
                 break
-            # 重複チェック（ベース名で）
-            base = re.sub(r'\._AC_[^.]+\.', '.', img_url)
-            if base in seen:
+            # ベース画像名で重複排除
+            base_match = re.search(r'/I/([A-Za-z0-9+_.-]+?)[\._]', img_url)
+            base_id = base_match.group(1) if base_match else img_url
+            if base_id in seen_bases:
                 continue
-            seen.add(base)
+            seen_bases.add(base_id)
 
             try:
-                img_resp = requests.get(img_url, headers=headers, timeout=5)
-                img = Image.open(BytesIO(img_resp.content)).convert("RGBA")
-                images.append(img)
+                img_resp = session.get(img_url, timeout=5)
+                if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                    img = Image.open(BytesIO(img_resp.content)).convert("RGBA")
+                    # 極端に小さい画像（アイコンなど）を除外
+                    if img.width >= 50 and img.height >= 50:
+                        images.append(img)
             except Exception:
                 continue
 
