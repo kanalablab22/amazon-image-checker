@@ -105,6 +105,29 @@ st.set_page_config(
     layout="wide",
 )
 
+# --- カスタムCSS ---
+st.markdown("""
+<style>
+/* 削除ボタン（✕）をミニマルに */
+button[kind="secondary"]:has(p) {
+    all: unset !important;
+}
+div[data-testid="stColumn"]:last-child button {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    font-size: 0.7em !important;
+    color: #aaa !important;
+    cursor: pointer !important;
+}
+div[data-testid="stColumn"]:last-child button:hover {
+    color: #e53935 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # --- サイドバー: Amazon公式ガイドライン ---
 with st.sidebar:
     st.markdown("## 📋 商品のメイン画像 要件")
