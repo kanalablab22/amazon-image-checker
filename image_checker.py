@@ -890,6 +890,99 @@ def check_lighting_direction(image: Image.Image, mask: np.ndarray, bbox: tuple) 
     )
 
 
+def check_stitching_quality(image: Image.Image, mask: np.ndarray) -> CheckResult:
+    """
+    チェック14: 縫製の仕上がり
+    縫い目（ステッチ）周辺の規則性を検出する。
+    - エッジ領域で高周波の線状パターンを抽出
+    - パターンの規則性（周期のばらつき）を測定
+    - 不規則 = 縫製の粗さ、ほつれ → レタッチ推奨
+    """
+    arr = np.array(image.convert("L")).astype(float)
+
+    if not np.any(mask):
+        return CheckResult(name="縫製処理", passed=True, value="計測不可",
+                          detail="商品領域が検出できませんでした", level="warn")
+
+    # --- Step 1: 商品の縁付近の領域を取得（縫い目が多い場所）---
+    kernel = 5
+    dilated = np.zeros_like(mask)
+    eroded = np.ones_like(mask)
+    for dy in range(-kernel, kernel + 1):
+        for dx in range(-kernel, kernel + 1):
+            shifted = np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
+            dilated |= shifted
+            eroded &= shifted
+    # エッジ領域 = 商品の縁付近（外周〜少し内側）
+    edge_region = dilated & ~eroded
+
+    if not np.any(edge_region):
+        return CheckResult(name="縫製処理", passed=True, value="計測不可",
+                          detail="エッジ領域が検出できませんでした", level="warn")
+
+    # --- Step 2: エッジ領域の高周波成分を検出（ステッチのパターン）---
+    # 水平・垂直の2次微分（ステッチラインを強調）
+    h, w = arr.shape
+    dx2 = np.zeros_like(arr)
+    dy2 = np.zeros_like(arr)
+    if h > 2 and w > 2:
+        dx2[:, 1:-1] = arr[:, 2:] - 2 * arr[:, 1:-1] + arr[:, :-2]
+        dy2[1:-1, :] = arr[2:, :] - 2 * arr[1:-1, :] + arr[:-2, :]
+
+    high_freq = np.sqrt(dx2**2 + dy2**2)
+    edge_high_freq = high_freq[edge_region]
+
+    # --- Step 3: 高周波の強度分布を分析 ---
+    mean_hf = float(np.mean(edge_high_freq))
+    std_hf = float(np.std(edge_high_freq))
+
+    # 高周波パターンのばらつき = 不規則なステッチ
+    # 均一なステッチ → 規則的な高周波 → 標準偏差/平均が小さい
+    cv = std_hf / max(mean_hf, 0.001)  # 変動係数
+
+    # --- Step 4: ステッチ周辺の局所的な不規則性を検出 ---
+    # エッジ領域を小ブロックに分割して均一性をチェック
+    block_size = 8
+    block_stds = []
+    for y in range(0, h - block_size, block_size * 3):
+        for x in range(0, w - block_size, block_size * 3):
+            block_mask = edge_region[y:y+block_size, x:x+block_size]
+            if np.sum(block_mask) > block_size * block_size // 3:
+                block_vals = high_freq[y:y+block_size, x:x+block_size][block_mask]
+                block_stds.append(float(np.std(block_vals)))
+
+    if not block_stds:
+        return CheckResult(name="縫製処理", passed=True, value="計測不可",
+                          detail="解析に十分な領域がありませんでした", level="warn")
+
+    # ブロック間のばらつき（大きい = 部分的に粗いステッチがある）
+    block_variation = float(np.std(block_stds))
+    mean_block_std = float(np.mean(block_stds))
+
+    # --- Step 5: 総合判定 ---
+    # スコア = 高周波の均一性 + ブロック間のばらつきの少なさ
+    # 良い縫製: mean_hf高い（ディテールあり）+ cv低い（均一）+ block_variation低い
+    irregularity = cv * 0.4 + (block_variation / max(mean_block_std, 0.001)) * 0.6
+
+    if irregularity < 1.0 and mean_hf > 3:
+        level = "ok"
+        detail = "縫い目が均一で仕上がりが綺麗です"
+    elif irregularity < 1.5:
+        level = "warn"
+        detail = "縫製にやや不均一な箇所があります。ステッチ周りのレタッチを検討してみてください"
+    else:
+        level = "ng"
+        detail = "縫い目に粗い箇所が目立ちます。クローンスタンプなどでレタッチすることをおすすめします"
+
+    return CheckResult(
+        name="縫製処理",
+        passed=level != "ng",
+        value=f"均一性 {irregularity:.2f}",
+        detail=detail,
+        level=level,
+    )
+
+
 def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
     """商品bboxに赤枠を描画した画像を作成（余白付きで見切れ防止）"""
     annotated = image.copy().convert("RGB")
@@ -994,6 +1087,9 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
 
     # 13. 光の方向性
     results.append(check_lighting_direction(image, mask, bbox))
+
+    # 14. 縫製の仕上がり
+    results.append(check_stitching_quality(image, mask))
 
     # bbox赤枠付き画像
     annotated = _create_annotated_image(image, bbox)
