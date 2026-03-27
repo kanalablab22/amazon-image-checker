@@ -930,91 +930,147 @@ def check_lighting_direction(image: Image.Image, mask: np.ndarray, bbox: tuple) 
 def check_stitching_quality(image: Image.Image, mask: np.ndarray) -> CheckResult:
     """
     チェック14: 縫製の仕上がり
-    縫い目（ステッチ）周辺の規則性を検出する。
-    - エッジ領域で高周波の線状パターンを抽出
-    - パターンの規則性（周期のばらつき）を測定
-    - 不規則 = 縫製の粗さ、ほつれ → レタッチ推奨
+    3つの観点で縫製品質を評価:
+      A) 商品輪郭のなめらかさ（粗い縫製 → ガタガタした輪郭）
+      B) 縁付近のステッチラインの明暗コントラスト異常
+      C) 糸のはみ出し・ほつれ（境界付近の細い突起）
     """
     arr = np.array(image.convert("L")).astype(float)
+    h, w = arr.shape
 
     if not np.any(mask):
         return CheckResult(name="縫製処理", passed=True, value="計測不可",
                           detail="商品領域が検出できませんでした", level="warn")
 
-    # --- Step 1: 商品の縁付近の領域を取得（縫い目が多い場所）---
-    kernel = 5
-    dilated = np.zeros_like(mask)
-    eroded = np.ones_like(mask)
-    for dy in range(-kernel, kernel + 1):
-        for dx in range(-kernel, kernel + 1):
-            shifted = np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
-            dilated |= shifted
+    # --- A) 輪郭のなめらかさ ---
+    # 商品マスクの境界を抽出
+    border = np.zeros_like(mask)
+    for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+        shifted = np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
+        border |= (mask & ~shifted)
+
+    border_points = np.argwhere(border)
+    contour_roughness = 0.0
+
+    if len(border_points) > 20:
+        # 輪郭点をサンプリングして局所的な方向変化を測定
+        step = max(1, len(border_points) // 200)
+        sampled = border_points[::step]
+
+        if len(sampled) > 10:
+            # 各点の前後5点での方向変化角度を計算
+            angles = []
+            window = 5
+            for i in range(window, len(sampled) - window):
+                v1 = sampled[i] - sampled[i - window]
+                v2 = sampled[i + window] - sampled[i]
+                norm1 = np.linalg.norm(v1)
+                norm2 = np.linalg.norm(v2)
+                if norm1 > 0 and norm2 > 0:
+                    cos_a = np.clip(np.dot(v1, v2) / (norm1 * norm2), -1, 1)
+                    angles.append(abs(float(np.arccos(cos_a))))
+
+            if angles:
+                # 角度変化のばらつき = 輪郭のガタガタ度
+                contour_roughness = float(np.std(angles))
+
+    # --- B) 縁付近のステッチライン品質 ---
+    # 境界から内側に少し入った領域（ステッチが走る場所）
+    inner_band = np.zeros_like(mask)
+    current = mask.copy()
+    for _ in range(12):  # 12px内側まで
+        eroded = np.ones_like(current)
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+            shifted = np.roll(np.roll(current, dy, axis=0), dx, axis=1)
             eroded &= shifted
-    # エッジ領域 = 商品の縁付近（外周〜少し内側）
-    edge_region = dilated & ~eroded
+        layer = current & ~eroded
+        inner_band |= layer
+        current = eroded
 
-    if not np.any(edge_region):
-        return CheckResult(name="縫製処理", passed=True, value="計測不可",
-                          detail="エッジ領域が検出できませんでした", level="warn")
+    stitch_score = 0.0
+    if np.any(inner_band):
+        # ステッチ帯域内の輝度勾配を計算
+        grad_x = np.zeros_like(arr)
+        grad_y = np.zeros_like(arr)
+        if h > 2 and w > 2:
+            grad_x[:, 1:-1] = arr[:, 2:] - arr[:, :-2]
+            grad_y[1:-1, :] = arr[2:, :] - arr[:-2, :]
+        gradient_mag = np.sqrt(grad_x**2 + grad_y**2)
 
-    # --- Step 2: エッジ領域の高周波成分を検出（ステッチのパターン）---
-    # 水平・垂直の2次微分（ステッチラインを強調）
-    h, w = arr.shape
-    dx2 = np.zeros_like(arr)
-    dy2 = np.zeros_like(arr)
-    if h > 2 and w > 2:
-        dx2[:, 1:-1] = arr[:, 2:] - 2 * arr[:, 1:-1] + arr[:, :-2]
-        dy2[1:-1, :] = arr[2:, :] - 2 * arr[1:-1, :] + arr[:-2, :]
+        band_grads = gradient_mag[inner_band]
+        # ステッチ帯の勾配が強い箇所の割合（糸が見えてる率）
+        strong_grad_ratio = float(np.sum(band_grads > np.percentile(band_grads, 75))) / max(len(band_grads), 1)
 
-    high_freq = np.sqrt(dx2**2 + dy2**2)
-    edge_high_freq = high_freq[edge_region]
+        # 勾配の局所ばらつき（ブロック間で差が大きい = 縫製が不均一）
+        block_size = 10
+        block_means = []
+        for y in range(0, h - block_size, block_size * 2):
+            for x in range(0, w - block_size, block_size * 2):
+                blk_mask = inner_band[y:y+block_size, x:x+block_size]
+                if np.sum(blk_mask) > block_size:
+                    blk_grad = gradient_mag[y:y+block_size, x:x+block_size][blk_mask]
+                    block_means.append(float(np.mean(blk_grad)))
 
-    # --- Step 3: 高周波の強度分布を分析 ---
-    mean_hf = float(np.mean(edge_high_freq))
-    std_hf = float(np.std(edge_high_freq))
+        if block_means:
+            block_cv = float(np.std(block_means)) / max(float(np.mean(block_means)), 0.001)
+            stitch_score = block_cv  # 高い = 不均一
 
-    # 高周波パターンのばらつき = 不規則なステッチ
-    # 均一なステッチ → 規則的な高周波 → 標準偏差/平均が小さい
-    cv = std_hf / max(mean_hf, 0.001)  # 変動係数
+    # --- C) 糸のはみ出し検出 ---
+    # 境界のすぐ外側に商品色が飛び出してる箇所 = ほつれ・糸はみ出し
+    outer_band = np.zeros_like(mask)
+    expanded = mask.copy()
+    for _ in range(4):
+        new_expanded = expanded.copy()
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+            shifted = np.roll(np.roll(expanded, dy, axis=0), dx, axis=1)
+            new_expanded |= shifted
+        outer_band |= (new_expanded & ~expanded)
+        expanded = new_expanded
 
-    # --- Step 4: ステッチ周辺の局所的な不規則性を検出 ---
-    # エッジ領域を小ブロックに分割して均一性をチェック
-    block_size = 8
-    block_stds = []
-    for y in range(0, h - block_size, block_size * 3):
-        for x in range(0, w - block_size, block_size * 3):
-            block_mask = edge_region[y:y+block_size, x:x+block_size]
-            if np.sum(block_mask) > block_size * block_size // 3:
-                block_vals = high_freq[y:y+block_size, x:x+block_size][block_mask]
-                block_stds.append(float(np.std(block_vals)))
+    thread_score = 0.0
+    if np.any(outer_band):
+        # 外側バンドの中で背景でない（暗い）ピクセルの割合
+        outer_pixels = arr[outer_band]
+        # 背景は白(>240)のはずなので、暗いピクセル = 糸はみ出し
+        dark_in_outer = float(np.sum(outer_pixels < 220)) / max(len(outer_pixels), 1)
+        thread_score = dark_in_outer
 
-    if not block_stds:
-        return CheckResult(name="縫製処理", passed=True, value="計測不可",
-                          detail="解析に十分な領域がありませんでした", level="warn")
+    # --- 総合判定 ---
+    # 各スコアを重み付けで統合
+    # contour_roughness: 0.3〜0.8が正常、0.8以上がガタガタ
+    # stitch_score: 0.3以下が均一、0.5以上が不均一
+    # thread_score: 0.05以下が綺麗、0.1以上がはみ出しあり
 
-    # ブロック間のばらつき（大きい = 部分的に粗いステッチがある）
-    block_variation = float(np.std(block_stds))
-    mean_block_std = float(np.mean(block_stds))
+    roughness_penalty = max(0, (contour_roughness - 0.6) * 3)  # 0.6超えでペナルティ
+    stitch_penalty = max(0, (stitch_score - 0.3) * 3)  # 0.3超えでペナルティ
+    thread_penalty = max(0, (thread_score - 0.05) * 10)  # 0.05超えでペナルティ
 
-    # --- Step 5: 総合判定 ---
-    # スコア = 高周波の均一性 + ブロック間のばらつきの少なさ
-    # 良い縫製: mean_hf高い（ディテールあり）+ cv低い（均一）+ block_variation低い
-    irregularity = cv * 0.4 + (block_variation / max(mean_block_std, 0.001)) * 0.6
+    total_penalty = roughness_penalty * 0.3 + stitch_penalty * 0.4 + thread_penalty * 0.3
 
-    if irregularity < 1.0 and mean_hf > 3:
+    issues = []
+    if roughness_penalty > 0.3:
+        issues.append("輪郭にガタつきあり")
+    if stitch_penalty > 0.3:
+        issues.append("ステッチの不均一")
+    if thread_penalty > 0.3:
+        issues.append("糸のはみ出し")
+
+    if total_penalty < 0.3:
         level = "ok"
-        detail = "縫い目が均一で仕上がりが綺麗です"
-    elif irregularity < 1.5:
+        detail = "縫い目が綺麗に処理されています"
+    elif total_penalty < 0.7:
         level = "warn"
-        detail = "縫製にやや不均一な箇所があります。ステッチ周りのレタッチを検討してみてください"
+        issue_text = "・".join(issues) if issues else "やや粗い箇所"
+        detail = f"縫製に気になる箇所があります（{issue_text}）。ステッチ周りのレタッチを検討してみてください"
     else:
         level = "ng"
-        detail = "縫い目に粗い箇所が目立ちます。クローンスタンプなどでレタッチすることをおすすめします"
+        issue_text = "・".join(issues) if issues else "粗い箇所"
+        detail = f"縫製処理が不十分です（{issue_text}）。クローンスタンプやヒーリングブラシでレタッチしましょう"
 
     return CheckResult(
         name="縫製処理",
         passed=level != "ng",
-        value=f"均一性 {irregularity:.2f}",
+        value=f"品質スコア {max(0, 100 - total_penalty * 100):.0f}/100",
         detail=detail,
         level=level,
     )
