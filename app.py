@@ -322,27 +322,29 @@ with st.expander("📌 **画像の技術的要件（Amazon公式）**", expanded
 - **禁止**: テキスト、ロゴ、透かし等なし
         """)
 
-# --- キーワード入力（必須） ---
-st.markdown("### 🔍 狙っているキーワード")
-target_keyword = st.text_input(
-    "この商品が狙っているAmazon検索キーワードを入力してください（必須）",
-    placeholder="例: 本革 カードケース レディース",
-    key="target_keyword",
-)
+# --- 画像アップロード＆キーワード入力（並列） ---
+up_col, kw_col = st.columns([3, 2])
 
-if not target_keyword.strip():
-    st.warning("⬆️ まずキーワードを入力してください")
-    st.stop()
+with up_col:
+    st.markdown("**サムネイル画像をドラッグ＆ドロップ（複数OK）**")
+    uploaded_files = st.file_uploader(
+        "サムネイル画像をドラッグ＆ドロップ（複数OK）",
+        type=["png", "jpg", "jpeg", "webp"],
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+    )
 
-# ファイルアップロード
-uploaded_files = st.file_uploader(
-    "画像をドラッグ＆ドロップ（複数枚OK）",
-    type=["png", "jpg", "jpeg", "webp"],
-    accept_multiple_files=True,
-)
+with kw_col:
+    st.markdown("**🔍 検索キーワード（検索結果プレビュー用）**")
+    target_keyword = st.text_input(
+        "検索キーワード",
+        placeholder="例：財布 レディース 本革",
+        key="target_keyword",
+        label_visibility="collapsed",
+    )
 
 if not uploaded_files:
-    st.info("👆 チェックしたい商品画像をアップロードしてください")
+    st.info("👆 上のエリアにサムネイル画像をドロップしてください（複数OK）")
     st.stop()
 
 # --- チェック実行 ---
@@ -479,54 +481,52 @@ for i, report in enumerate(reports):
         st.markdown("---")
 
 # --- 検索結果シミュレーション ---
-st.markdown("---")
-st.markdown("## 🔍 検索結果シミュレーション")
-st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ")
-
-# 最初の画像を使ってシミュレーション
 sim_pc = None
-with st.spinner("Amazon検索結果を取得中..."):
-    try:
-        uploaded_files[0].seek(0)
-        user_img = Image.open(uploaded_files[0])
+if target_keyword.strip():
+    st.markdown("---")
+    st.markdown("## 🔍 検索結果シミュレーション")
+    st.caption(f"「{target_keyword}」でAmazon検索した場合のイメージ")
 
-        tab_pc, tab_sp = st.tabs(["🖥️ PC版", "📱 スマホ版"])
-        with tab_pc:
-            # Amazon検索結果HTMLを丸ごと取得して商品画像を差し替え
-            amazon_html = fetch_amazon_search_html(target_keyword, user_img, position=5)
-            components.html(amazon_html, height=800, scrolling=True)
+    with st.spinner("Amazon検索結果を取得中..."):
+        try:
+            uploaded_files[0].seek(0)
+            user_img = Image.open(uploaded_files[0])
 
-            # PDF用にサムネグリッドも生成（非表示）
-            competitors = fetch_amazon_thumbnails(target_keyword, count=14)
-            sim_pc = create_search_simulation(
-                keyword=target_keyword,
-                user_image=user_img,
-                position=5,
-                competitor_images=competitors,
-            )
-        with tab_sp:
-            # PC版と同じHTMLを使い回し（2回目のリクエスト不要）
-            amazon_html_sp = amazon_html
-            # スマホ幅に制限するCSS追加
-            sp_css = """
-            <style>
-                html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
-                *, *::before, *::after { box-sizing:border-box !important; }
-                /* 検索結果を2列に強制 */
-                .s-main-slot { display:flex !important; flex-wrap:wrap !important; }
-                .s-main-slot > div[data-component-type="s-search-result"] {
-                    width:50% !important; flex:0 0 50% !important;
-                }
-                .s-main-slot > div:not([data-component-type="s-search-result"]) {
-                    width:100% !important; flex:0 0 100% !important;
-                }
-            </style>
-            """
-            amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
-            components.html(amazon_html_sp, height=700, scrolling=True)
-    except Exception as e:
-        st.warning(f"検索結果の取得に失敗しました: {e}")
-        st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
+            tab_pc, tab_sp = st.tabs(["🖥️ PC版", "📱 スマホ版"])
+            with tab_pc:
+                amazon_html = fetch_amazon_search_html(target_keyword, user_img, position=5)
+                components.html(amazon_html, height=800, scrolling=True)
+
+                competitors = fetch_amazon_thumbnails(target_keyword, count=14)
+                sim_pc = create_search_simulation(
+                    keyword=target_keyword,
+                    user_image=user_img,
+                    position=5,
+                    competitor_images=competitors,
+                )
+            with tab_sp:
+                amazon_html_sp = amazon_html
+                sp_css = """
+                <style>
+                    html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
+                    *, *::before, *::after { box-sizing:border-box !important; }
+                    .s-main-slot { display:flex !important; flex-wrap:wrap !important; }
+                    .s-main-slot > div[data-component-type="s-search-result"] {
+                        width:50% !important; flex:0 0 50% !important;
+                    }
+                    .s-main-slot > div:not([data-component-type="s-search-result"]) {
+                        width:100% !important; flex:0 0 100% !important;
+                    }
+                </style>
+                """
+                amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
+                components.html(amazon_html_sp, height=700, scrolling=True)
+        except Exception as e:
+            st.warning(f"検索結果の取得に失敗しました: {e}")
+            st.info("Amazon側のアクセス制限の可能性があります。時間をおいて再度お試しください。")
+else:
+    st.markdown("---")
+    st.info("💡 検索キーワードを入力すると、Amazon検索結果のシミュレーションも表示されますよ")
 
 # --- PDFレポート ---
 st.markdown("---")
