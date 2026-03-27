@@ -920,17 +920,17 @@ def check_stitching_quality(image: Image.Image, mask: np.ndarray) -> CheckResult
         ((brightness > 160) & (saturation < 0.15)) |  # マット金属
         (brightness > 230)  # 強反射
     )
-    # 金属領域を膨張させて周辺も除外（金属の縁を拾わないように）
-    for _ in range(8):
+    # 金属領域を少し膨張（金属の縁を拾わないように。控えめに3回）
+    for _ in range(3):
         expanded_metal = metal_mask.copy()
-        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]:
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
             expanded_metal |= np.roll(np.roll(metal_mask, dy, axis=0), dx, axis=1)
         metal_mask = expanded_metal
 
     # 金属を除外したマスク
     fabric_mask = mask & ~metal_mask
-    if np.sum(fabric_mask) < np.sum(mask) * 0.3:
-        # 金属が70%以上 → 革製品ではなさそう
+    if np.sum(fabric_mask) < np.sum(mask) * 0.1:
+        # 金属が90%以上 → 革製品ではなさそう（時計・アクセサリー等）
         return CheckResult(name="縫製処理", passed=True, value="対象外",
                           detail="金属パーツが多い商品のため縫製チェックをスキップしました", level="ok")
 
