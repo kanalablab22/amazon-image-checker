@@ -15,8 +15,36 @@ from amazon_search_sim import create_search_simulation, fetch_amazon_thumbnails
 from amazon_html_sim import fetch_amazon_search_html, fetch_amazon_mobile_html
 import streamlit.components.v1 as components
 
-# --- カスタムデータの永続化（GitHub API / 汎用） ---
+# --- ジャンル別アドバイス ---
 import os
+
+def _load_genre_tips():
+    """genre_tips.jsonを読み込む"""
+    path = os.path.join(os.path.dirname(__file__), "genre_tips.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _match_genre(keyword: str, tips_data: list) -> dict | None:
+    """キーワードにマッチするジャンルを探す"""
+    if not keyword.strip():
+        return None
+    kw_lower = keyword.lower()
+    best_match = None
+    best_score = 0
+    for genre in tips_data:
+        score = 0
+        for gk in genre.get("keywords", []):
+            if gk.lower() in kw_lower or kw_lower in gk.lower():
+                score += 1
+        if score > best_score:
+            best_score = score
+            best_match = genre
+    return best_match if best_score > 0 else None
+
+# --- カスタムデータの永続化（GitHub API / 汎用） ---
 
 def _github_headers():
     token = st.secrets.get("github", {}).get("token", "")
@@ -480,6 +508,32 @@ for i, report in enumerate(reports):
 
     if i < len(reports) - 1:
         st.markdown("---")
+
+# --- ジャンル別サムネイル戦略アドバイス ---
+if target_keyword.strip():
+    genre_tips = _load_genre_tips()
+    matched_genre = _match_genre(target_keyword, genre_tips)
+    if matched_genre:
+        st.markdown("---")
+        icon = matched_genre.get("genre_icon", "💡")
+        name = matched_genre.get("genre_name", "")
+        refs = matched_genre.get("reference_brands", "")
+        st.markdown(f"""
+<div style="background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%); border-radius: 16px; padding: 24px; margin-bottom: 20px;">
+  <h3 style="margin:0 0 4px 0;">{icon} 「{name}」ジャンルのサムネイル戦略</h3>
+  <p style="margin:0; color:#888; font-size:13px;">参考店舗: {refs}</p>
+</div>
+""", unsafe_allow_html=True)
+
+        tip_cols = st.columns(2)
+        for idx, tip in enumerate(matched_genre.get("tips", [])[:4]):
+            with tip_cols[idx % 2]:
+                st.markdown(f"""
+<div style="background: white; border: 1px solid #e8ecf0; border-radius: 12px; padding: 16px; margin-bottom: 12px; min-height: 140px;">
+  <p style="margin:0 0 8px 0; font-weight: bold;">💡 {tip['title']}</p>
+  <p style="margin:0; font-size: 13px; color: #444; line-height: 1.6;">{tip['body']}</p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 検索結果シミュレーション ---
 sim_pc = None
