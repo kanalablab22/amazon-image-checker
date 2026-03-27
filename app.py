@@ -564,32 +564,20 @@ if target_keyword.strip():
                 sp_css = """
                 <style>
                     html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
-                    *, *::before, *::after { box-sizing:border-box !important; max-width:375px !important; }
-                    /* グリッド・フレックス系を全て2列に強制 */
-                    .s-main-slot,
-                    .s-search-results,
-                    [class*="search-results"],
-                    [class*="grid"] {
-                        display:flex !important; flex-wrap:wrap !important;
-                        max-width:375px !important;
+                    *, *::before, *::after { box-sizing:border-box !important; }
+                    /* 検索結果グリッドを2列に強制 */
+                    .s-main-slot {
+                        display:grid !important;
                         grid-template-columns: repeat(2, 1fr) !important;
+                        gap: 4px !important;
+                        max-width:375px !important;
                     }
-                    .s-main-slot > div[data-component-type="s-search-result"],
-                    [data-component-type="s-search-result"] {
-                        width:50% !important; flex:0 0 50% !important;
-                        max-width:187px !important; min-width:0 !important;
-                        overflow:hidden !important;
+                    .s-main-slot > div[data-component-type="s-search-result"] {
+                        width:100% !important;
                     }
                     .s-main-slot > div:not([data-component-type="s-search-result"]) {
-                        width:100% !important; flex:0 0 100% !important;
+                        grid-column: 1 / -1 !important;
                     }
-                    /* Amazon内部のグリッド幅を上書き */
-                    .s-result-item, .sg-col, [class*="sg-col"] {
-                        width:50% !important; max-width:187px !important;
-                        min-width:0 !important;
-                    }
-                    .sg-row { display:flex !important; flex-wrap:wrap !important; }
-                    img { max-width:100% !important; height:auto !important; }
                 </style>
                 """
                 amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
