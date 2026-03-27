@@ -565,19 +565,17 @@ if target_keyword.strip():
                 <style>
                     html, body { margin:0 !important; padding:0 !important; max-width:375px !important; margin:0 auto !important; overflow-x:hidden !important; }
                     *, *::before, *::after { box-sizing:border-box !important; }
-                    /* 検索結果グリッドを2列に強制 */
-                    .s-main-slot {
-                        display:grid !important;
-                        grid-template-columns: repeat(2, 1fr) !important;
-                        gap: 4px !important;
-                        max-width:375px !important;
-                    }
+                    /* 検索結果を2列に強制（元のCSS + 追加セレクタ） */
+                    .s-main-slot { display:flex !important; flex-wrap:wrap !important; }
                     .s-main-slot > div[data-component-type="s-search-result"] {
-                        width:100% !important;
+                        width:50% !important; flex:0 0 50% !important;
                     }
                     .s-main-slot > div:not([data-component-type="s-search-result"]) {
-                        grid-column: 1 / -1 !important;
+                        width:100% !important; flex:0 0 100% !important;
                     }
+                    /* 追加: Amazon内部グリッドの3列化を防止 */
+                    .s-result-item { width:50% !important; }
+                    .sg-col-inner { padding:4px !important; }
                 </style>
                 """
                 amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
