@@ -549,14 +549,14 @@ if target_keyword.strip():
 
             tab_pc, tab_sp = st.tabs(["🖥️ PC版", "📱 スマホ版"])
             with tab_pc:
-                amazon_html = fetch_amazon_search_html(target_keyword, user_img, position=5)
+                amazon_html = fetch_amazon_search_html(target_keyword, user_img, position=8)
                 components.html(amazon_html, height=800, scrolling=True)
 
                 competitors = fetch_amazon_thumbnails(target_keyword, count=14)
                 sim_pc = create_search_simulation(
                     keyword=target_keyword,
                     user_image=user_img,
-                    position=5,
+                    position=8,
                     competitor_images=competitors,
                 )
             with tab_sp:
