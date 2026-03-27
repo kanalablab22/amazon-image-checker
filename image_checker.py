@@ -60,17 +60,37 @@ def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
             uniformity = std_local / max(mean_local, 0.001)
 
             # 革・布テクスチャの条件を満たすブロックの割合を計算
-            # → 表面の大部分が革・布でないと has_fabric にならない
             fabric_blocks = 0
             for s in local_stds:
-                # 各ブロックが革・布っぽいテクスチャか（適度な局所コントラスト）
                 if 4 < s < 50:
                     fabric_blocks += 1
             fabric_ratio = fabric_blocks / max(len(local_stds), 1)
 
-            # 判定: 全体の均一性 + 表面の60%以上が革・布テクスチャ
+            # 追加判定: 革・布はミクロなランダムテクスチャがある
+            # プラ・金属は滑らかなグラデーション（隣接ブロック間の平均値が近い）
+            # → ブロックごとの「平均輝度」のばらつきを見る
+            block_means = []
+            for y in range(0, h - block, block * 2):
+                for x in range(0, w - block, block * 2):
+                    blk = product_gray[y:y+block, x:x+block]
+                    valid = blk[~np.isnan(blk)]
+                    if len(valid) > block * block // 2:
+                        block_means.append(float(np.mean(valid)))
+
+            # 革・布: 局所コントラスト(std)は高いが平均輝度はなめらかに変化
+            # プラ・金属: 局所コントラスト(std)が低い or 平均輝度が急変する（エッジ）
+            has_texture_grain = False
+            if block_means and len(block_means) > 5:
+                mean_brightness_std = float(np.std(block_means))
+                # テクスチャ粒度比 = 局所コントラスト / 輝度ばらつき
+                # 革: 局所コントラスト高 & 輝度ばらつき低〜中 → 比率が高い
+                # プラ: 局所コントラスト低 & 輝度ばらつき高（色分け）→ 比率が低い
+                grain_ratio = mean_local / max(mean_brightness_std, 0.001)
+                has_texture_grain = grain_ratio > 0.3
+
+            # 判定: 全体の均一性 + 60%以上が革布テクスチャ + 粒状テクスチャあり
             if (mean_local > 4 and uniformity < 1.5 and median_local > 3
-                    and fabric_ratio > 0.6):
+                    and fabric_ratio > 0.6 and has_texture_grain):
                 has_fabric = True
 
     # --- 色特性判別 ---
