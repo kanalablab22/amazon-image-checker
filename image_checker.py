@@ -894,147 +894,135 @@ def check_lighting_direction(image: Image.Image, mask: np.ndarray, bbox: tuple) 
 def check_stitching_quality(image: Image.Image, mask: np.ndarray) -> CheckResult:
     """
     チェック14: 縫製の仕上がり
-    3つの観点で縫製品質を評価:
-      A) 商品輪郭のなめらかさ（粗い縫製 → ガタガタした輪郭）
-      B) 縁付近のステッチラインの明暗コントラスト異常
-      C) 糸のはみ出し・ほつれ（境界付近の細い突起）
+    金属パーツ（ジッパー・金具・リング）を除外してから分析:
+      A) 糸のはみ出し・ほつれ（境界外側の非金属の小さな突起）
+      B) 縫い目付近のステッチ均一性
     """
-    arr = np.array(image.convert("L")).astype(float)
-    h, w = arr.shape
+    rgb = np.array(image.convert("RGB")).astype(float)
+    gray = np.array(image.convert("L")).astype(float)
+    h, w = gray.shape
 
     if not np.any(mask):
         return CheckResult(name="縫製処理", passed=True, value="計測不可",
                           detail="商品領域が検出できませんでした", level="warn")
 
-    # --- A) 輪郭のなめらかさ ---
-    # 商品マスクの境界を抽出
-    border = np.zeros_like(mask)
-    for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-        shifted = np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
-        border |= (mask & ~shifted)
+    # --- 金属パーツの検出＆除外 ---
+    # 金属 = 高輝度 + 低彩度（シルバー/ゴールド/黒金属）
+    r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
+    max_rgb = np.maximum(np.maximum(r, g), b)
+    min_rgb = np.minimum(np.minimum(r, g), b)
+    saturation = (max_rgb - min_rgb) / np.maximum(max_rgb, 1)
+    brightness = max_rgb
 
-    border_points = np.argwhere(border)
-    contour_roughness = 0.0
+    # 金属マスク: (明るい & 低彩度) or (非常に明るい反射)
+    metal_mask = (
+        ((brightness > 180) & (saturation < 0.25)) |  # シルバー系
+        ((brightness > 160) & (saturation < 0.15)) |  # マット金属
+        (brightness > 230)  # 強反射
+    )
+    # 金属領域を膨張させて周辺も除外（金属の縁を拾わないように）
+    for _ in range(8):
+        expanded_metal = metal_mask.copy()
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]:
+            expanded_metal |= np.roll(np.roll(metal_mask, dy, axis=0), dx, axis=1)
+        metal_mask = expanded_metal
 
-    if len(border_points) > 20:
-        # 輪郭点をサンプリングして局所的な方向変化を測定
-        step = max(1, len(border_points) // 200)
-        sampled = border_points[::step]
+    # 金属を除外したマスク
+    fabric_mask = mask & ~metal_mask
+    if np.sum(fabric_mask) < np.sum(mask) * 0.3:
+        # 金属が70%以上 → 革製品ではなさそう
+        return CheckResult(name="縫製処理", passed=True, value="対象外",
+                          detail="金属パーツが多い商品のため縫製チェックをスキップしました", level="ok")
 
-        if len(sampled) > 10:
-            # 各点の前後5点での方向変化角度を計算
-            angles = []
-            window = 5
-            for i in range(window, len(sampled) - window):
-                v1 = sampled[i] - sampled[i - window]
-                v2 = sampled[i + window] - sampled[i]
-                norm1 = np.linalg.norm(v1)
-                norm2 = np.linalg.norm(v2)
-                if norm1 > 0 and norm2 > 0:
-                    cos_a = np.clip(np.dot(v1, v2) / (norm1 * norm2), -1, 1)
-                    angles.append(abs(float(np.arccos(cos_a))))
-
-            if angles:
-                # 角度変化のばらつき = 輪郭のガタガタ度
-                contour_roughness = float(np.std(angles))
-
-    # --- B) 縁付近のステッチライン品質 ---
-    # 境界から内側に少し入った領域（ステッチが走る場所）
-    inner_band = np.zeros_like(mask)
-    current = mask.copy()
-    for _ in range(12):  # 12px内側まで
-        eroded = np.ones_like(current)
+    # --- A) 糸のはみ出し・ほつれ検出 ---
+    # fabric_maskの境界のすぐ外側で、非背景＆非金属のピクセルを探す
+    outer_band = np.zeros_like(fabric_mask)
+    expanded = fabric_mask.copy()
+    for _ in range(5):
+        new_expanded = expanded.copy()
         for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-            shifted = np.roll(np.roll(current, dy, axis=0), dx, axis=1)
-            eroded &= shifted
-        layer = current & ~eroded
-        inner_band |= layer
-        current = eroded
+            shifted = np.roll(np.roll(expanded, dy, axis=0), dx, axis=1)
+            new_expanded |= shifted
+        outer_band |= (new_expanded & ~expanded & ~metal_mask)  # 金属部分を除外
+        expanded = new_expanded
+
+    thread_score = 0.0
+    if np.any(outer_band):
+        outer_pixels = gray[outer_band]
+        # 背景は白(>235)のはず、暗いピクセル = 糸のはみ出し
+        dark_ratio = float(np.sum(outer_pixels < 230)) / max(len(outer_pixels), 1)
+        # 小さな突起だけカウント（大きな塊は商品の一部の可能性）
+        thread_score = dark_ratio
+
+    # --- B) ステッチ帯の均一性 ---
+    # fabric境界から5〜15px内側 = ステッチが走る場所
+    inner = fabric_mask.copy()
+    for _ in range(5):
+        eroded = np.ones_like(inner)
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+            eroded &= np.roll(np.roll(inner, dy, axis=0), dx, axis=1)
+        inner = eroded
+    deep = inner.copy()
+    for _ in range(10):
+        eroded = np.ones_like(deep)
+        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+            eroded &= np.roll(np.roll(deep, dy, axis=0), dx, axis=1)
+        deep = eroded
+    stitch_band = inner & ~deep & ~metal_mask
 
     stitch_score = 0.0
-    if np.any(inner_band):
-        # ステッチ帯域内の輝度勾配を計算
-        grad_x = np.zeros_like(arr)
-        grad_y = np.zeros_like(arr)
+    if np.any(stitch_band):
+        # 勾配の計算
+        grad_x = np.zeros_like(gray)
+        grad_y = np.zeros_like(gray)
         if h > 2 and w > 2:
-            grad_x[:, 1:-1] = arr[:, 2:] - arr[:, :-2]
-            grad_y[1:-1, :] = arr[2:, :] - arr[:-2, :]
+            grad_x[:, 1:-1] = gray[:, 2:] - gray[:, :-2]
+            grad_y[1:-1, :] = gray[2:, :] - gray[:-2, :]
         gradient_mag = np.sqrt(grad_x**2 + grad_y**2)
 
-        band_grads = gradient_mag[inner_band]
-        # ステッチ帯の勾配が強い箇所の割合（糸が見えてる率）
-        strong_grad_ratio = float(np.sum(band_grads > np.percentile(band_grads, 75))) / max(len(band_grads), 1)
-
-        # 勾配の局所ばらつき（ブロック間で差が大きい = 縫製が不均一）
-        block_size = 10
+        # ブロック単位で勾配のばらつきを測定
+        block_size = 12
         block_means = []
         for y in range(0, h - block_size, block_size * 2):
             for x in range(0, w - block_size, block_size * 2):
-                blk_mask = inner_band[y:y+block_size, x:x+block_size]
-                if np.sum(blk_mask) > block_size:
+                blk_mask = stitch_band[y:y+block_size, x:x+block_size]
+                if np.sum(blk_mask) > block_size * 2:
                     blk_grad = gradient_mag[y:y+block_size, x:x+block_size][blk_mask]
                     block_means.append(float(np.mean(blk_grad)))
 
         if block_means:
             block_cv = float(np.std(block_means)) / max(float(np.mean(block_means)), 0.001)
-            stitch_score = block_cv  # 高い = 不均一
-
-    # --- C) 糸のはみ出し検出 ---
-    # 境界のすぐ外側に商品色が飛び出してる箇所 = ほつれ・糸はみ出し
-    outer_band = np.zeros_like(mask)
-    expanded = mask.copy()
-    for _ in range(4):
-        new_expanded = expanded.copy()
-        for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-            shifted = np.roll(np.roll(expanded, dy, axis=0), dx, axis=1)
-            new_expanded |= shifted
-        outer_band |= (new_expanded & ~expanded)
-        expanded = new_expanded
-
-    thread_score = 0.0
-    if np.any(outer_band):
-        # 外側バンドの中で背景でない（暗い）ピクセルの割合
-        outer_pixels = arr[outer_band]
-        # 背景は白(>240)のはずなので、暗いピクセル = 糸はみ出し
-        dark_in_outer = float(np.sum(outer_pixels < 220)) / max(len(outer_pixels), 1)
-        thread_score = dark_in_outer
+            stitch_score = block_cv
 
     # --- 総合判定 ---
-    # 各スコアを重み付けで統合
-    # contour_roughness: 0.3〜0.8が正常、0.8以上がガタガタ
-    # stitch_score: 0.3以下が均一、0.5以上が不均一
-    # thread_score: 0.05以下が綺麗、0.1以上がはみ出しあり
-
-    roughness_penalty = max(0, (contour_roughness - 0.6) * 3)  # 0.6超えでペナルティ
-    stitch_penalty = max(0, (stitch_score - 0.3) * 3)  # 0.3超えでペナルティ
-    thread_penalty = max(0, (thread_score - 0.05) * 10)  # 0.05超えでペナルティ
-
-    total_penalty = roughness_penalty * 0.3 + stitch_penalty * 0.4 + thread_penalty * 0.3
+    thread_penalty = max(0, (thread_score - 0.08) * 8)
+    stitch_penalty = max(0, (stitch_score - 0.5) * 2)
+    total_penalty = thread_penalty * 0.5 + stitch_penalty * 0.5
 
     issues = []
-    if roughness_penalty > 0.3:
-        issues.append("輪郭にガタつきあり")
-    if stitch_penalty > 0.3:
+    if thread_penalty > 0.2:
+        issues.append("糸のほつれ・はみ出し")
+    if stitch_penalty > 0.2:
         issues.append("ステッチの不均一")
-    if thread_penalty > 0.3:
-        issues.append("糸のはみ出し")
 
-    if total_penalty < 0.3:
+    score = max(0, round(100 - total_penalty * 100))
+
+    if total_penalty < 0.2:
         level = "ok"
-        detail = "縫い目が綺麗に処理されています"
-    elif total_penalty < 0.7:
+        detail = "縫製が綺麗に処理されています"
+    elif total_penalty < 0.5:
         level = "warn"
-        issue_text = "・".join(issues) if issues else "やや粗い箇所"
-        detail = f"縫製に気になる箇所があります（{issue_text}）。ステッチ周りのレタッチを検討してみてください"
+        issue_text = "・".join(issues) if issues else "やや気になる箇所"
+        detail = f"縫製に気になる箇所があります（{issue_text}）。レタッチを検討してみてください"
     else:
         level = "ng"
-        issue_text = "・".join(issues) if issues else "粗い箇所"
-        detail = f"縫製処理が不十分です（{issue_text}）。クローンスタンプやヒーリングブラシでレタッチしましょう"
+        issue_text = "・".join(issues) if issues else "要レタッチ"
+        detail = f"縫製の修正が必要です（{issue_text}）。クローンスタンプやヒーリングブラシでレタッチしましょう"
 
     return CheckResult(
         name="縫製処理",
         passed=level != "ng",
-        value=f"品質スコア {max(0, 100 - total_penalty * 100):.0f}/100",
+        value=f"品質スコア {score}/100",
         detail=detail,
         level=level,
     )
