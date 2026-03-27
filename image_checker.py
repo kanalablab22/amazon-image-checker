@@ -10,17 +10,19 @@ from dataclasses import dataclass
 
 def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
     """
-    商品の色特性を自動判別する。
+    商品の色特性＋素材特性を自動判別する。
     Returns: {
         "type": "dark" | "light" | "colorful" | "neutral",
         "avg_brightness": float,
         "avg_saturation": float,
         "description": str,
+        "has_fabric": bool,  # 革・布・繊維系の素材かどうか
     }
     """
     arr = np.array(image.convert("RGB"))
     if not np.any(mask):
-        return {"type": "neutral", "avg_brightness": 128, "avg_saturation": 30, "description": "判別不可"}
+        return {"type": "neutral", "avg_brightness": 128, "avg_saturation": 30,
+                "description": "判別不可", "has_fabric": False}
 
     pixels = arr[mask].astype(float)
     r, g, b = pixels[:, 0], pixels[:, 1], pixels[:, 2]
@@ -30,21 +32,51 @@ def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
     avg_brightness = float(np.mean(max_rgb))
     avg_saturation = float(np.mean(max_rgb - min_rgb))
 
+    # --- 素材判別: 革・布っぽいテクスチャかどうか ---
+    # 革/布 = 細かい粒状のテクスチャ（高周波が密に分布）
+    # 木/プラ/金属 = 滑らかな面 or 大きな模様（高周波が疎）
+    gray = np.array(image.convert("L")).astype(float)
+    h, w = gray.shape
+    has_fabric = False
+
+    if h > 10 and w > 10:
+        # 小ブロック単位の局所標準偏差を計算
+        block = 6
+        local_stds = []
+        product_gray = gray.copy()
+        product_gray[~mask] = np.nan
+
+        for y in range(0, h - block, block * 2):
+            for x in range(0, w - block, block * 2):
+                blk = product_gray[y:y+block, x:x+block]
+                valid = blk[~np.isnan(blk)]
+                if len(valid) > block * block // 2:
+                    local_stds.append(float(np.std(valid)))
+
+        if local_stds:
+            mean_local = float(np.mean(local_stds))
+            std_local = float(np.std(local_stds))
+            # 革・布の特徴: 局所コントラストが中程度で均一に分布
+            # （木目やプラスチックは局所コントラストが低い or 不均一）
+            if mean_local > 5 and mean_local < 35 and std_local < mean_local * 1.2:
+                has_fabric = True
+
+    # --- 色特性判別 ---
     if avg_brightness < 80:
         return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "暗色系商品（黒・ダークグレーなど）"}
+                "description": "暗色系商品（黒・ダークグレーなど）", "has_fabric": has_fabric}
     elif avg_brightness < 140 and avg_saturation < 25:
         return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "暗めの無彩色商品"}
+                "description": "暗めの無彩色商品", "has_fabric": has_fabric}
     elif avg_brightness > 200:
         return {"type": "light", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "明色系商品（白・ベージュなど）"}
+                "description": "明色系商品（白・ベージュなど）", "has_fabric": has_fabric}
     elif avg_saturation > 50:
         return {"type": "colorful", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "カラフルな商品"}
+                "description": "カラフルな商品", "has_fabric": has_fabric}
     else:
         return {"type": "neutral", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "中間色の商品"}
+                "description": "中間色の商品", "has_fabric": has_fabric}
 
 
 @dataclass
@@ -1088,8 +1120,9 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
     # 13. 光の方向性
     results.append(check_lighting_direction(image, mask, bbox))
 
-    # 14. 縫製の仕上がり
-    results.append(check_stitching_quality(image, mask))
+    # 14. 縫製の仕上がり（革・布素材の商品のみ）
+    if product_type.get("has_fabric", False):
+        results.append(check_stitching_quality(image, mask))
 
     # bbox赤枠付き画像
     annotated = _create_annotated_image(image, bbox)
