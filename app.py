@@ -27,7 +27,7 @@ def _load_genre_tips():
     except Exception:
         return []
 
-def _match_genre(keyword: str, tips_data: list) -> dict | None:
+def _match_genre(keyword: str, tips_data: list):
     """キーワードにマッチするジャンルを探す"""
     if not keyword.strip():
         return None
@@ -573,16 +573,22 @@ if target_keyword.strip():
                     .s-main-slot > div:not([data-component-type="s-search-result"]) {
                         width:100% !important; flex:0 0 100% !important;
                     }
-                    /* スポンサー広告枠も2列に強制 */
-                    [data-component-type="sp-sponsored-result"] .sg-row,
-                    [data-component-type="sp-sponsored-result"] [class*="sg-col"],
-                    .AdHolder .sg-row,
-                    [class*="sponsored"] .sg-row {
-                        display:flex !important; flex-wrap:wrap !important;
-                    }
-                    [data-component-type="sp-sponsored-result"] .sg-col-inner,
-                    .AdHolder .sg-col-inner {
+                    /* スポンサー広告含む全ての横並び要素を2列に */
+                    .sb-card-pcv2,
+                    [class*="sbv-product"] {
                         width:50% !important; flex:0 0 50% !important;
+                        overflow:hidden !important;
+                    }
+                    [class*="sb-card-pcv2-container"],
+                    [class*="sbv-product-row"],
+                    [class*="sb-card-pcv2-row"] {
+                        display:flex !important; flex-wrap:wrap !important;
+                        max-width:375px !important;
+                    }
+                    /* 全てのsg-col系を50%に制限 */
+                    .sg-col-4-of-12, .sg-col-4-of-16, .sg-col-4-of-20 {
+                        width:50% !important; max-width:50% !important;
+                        flex:0 0 50% !important;
                     }
                 </style>
                 """
