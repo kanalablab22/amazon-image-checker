@@ -57,13 +57,20 @@ def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
             mean_local = float(np.mean(local_stds))
             std_local = float(np.std(local_stds))
             median_local = float(np.median(local_stds))
-            # 革・布の特徴:
-            #   - 局所コントラストが一定以上ある（テクスチャ感）
-            #   - ブロック間のばらつきが比較的均一（表面が連続的）
-            #   - 中央値と平均値が近い（極端な外れ値が少ない）
-            # 木目・プラスチック・金属は局所コントラストが低いか、不均一
             uniformity = std_local / max(mean_local, 0.001)
-            if mean_local > 4 and uniformity < 1.5 and median_local > 3:
+
+            # 革・布テクスチャの条件を満たすブロックの割合を計算
+            # → 表面の大部分が革・布でないと has_fabric にならない
+            fabric_blocks = 0
+            for s in local_stds:
+                # 各ブロックが革・布っぽいテクスチャか（適度な局所コントラスト）
+                if 4 < s < 50:
+                    fabric_blocks += 1
+            fabric_ratio = fabric_blocks / max(len(local_stds), 1)
+
+            # 判定: 全体の均一性 + 表面の60%以上が革・布テクスチャ
+            if (mean_local > 4 and uniformity < 1.5 and median_local > 3
+                    and fabric_ratio > 0.6):
                 has_fabric = True
 
     # --- 色特性判別 ---
