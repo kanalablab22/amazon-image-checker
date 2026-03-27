@@ -342,6 +342,7 @@ with kw_col:
         key="target_keyword",
         label_visibility="collapsed",
     )
+    check_stitching = st.toggle("🪡 縫製チェック（革・布製品向け）", value=False, key="check_stitching")
 
 if not uploaded_files:
     st.info("👆 上のエリアにサムネイル画像をドロップしてください（複数OK）")
@@ -352,7 +353,7 @@ reports: list[ImageCheckReport] = []
 
 for uploaded_file in uploaded_files:
     image = Image.open(uploaded_file)
-    report = check_image(image, uploaded_file.name)
+    report = check_image(image, uploaded_file.name, check_stitching=check_stitching)
     reports.append(report)
 
 # --- 複数枚サマリー（2枚以上の場合） ---

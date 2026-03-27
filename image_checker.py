@@ -10,19 +10,18 @@ from dataclasses import dataclass
 
 def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
     """
-    商品の色特性＋素材特性を自動判別する。
+    商品の色特性を自動判別する。
     Returns: {
         "type": "dark" | "light" | "colorful" | "neutral",
         "avg_brightness": float,
         "avg_saturation": float,
         "description": str,
-        "has_stitching": bool,  # 縫い目（ステッチライン）が写っているか
     }
     """
     arr = np.array(image.convert("RGB"))
     if not np.any(mask):
         return {"type": "neutral", "avg_brightness": 128, "avg_saturation": 30,
-                "description": "判別不可", "has_stitching": False}
+                "description": "判別不可"}
 
     pixels = arr[mask].astype(float)
     r, g, b = pixels[:, 0], pixels[:, 1], pixels[:, 2]
@@ -32,116 +31,21 @@ def _detect_product_type(image: Image.Image, mask: np.ndarray) -> dict:
     avg_brightness = float(np.mean(max_rgb))
     avg_saturation = float(np.mean(max_rgb - min_rgb))
 
-    # --- ステッチライン検出: 画像内に縫い目が写っているか ---
-    # 素材ではなく「縫い目の存在」で判定する
-    gray = np.array(image.convert("L")).astype(float)
-    h, w = gray.shape
-    has_stitching = False
-
-    if h > 20 and w > 20:
-        # 商品境界から内側10〜25px付近のバンド（ステッチが走る典型的な位置）
-        # 簡易的な収縮でバンドを取得
-        inner_mask = mask.copy()
-        outer_mask = mask.copy()
-        for _ in range(10):
-            eroded = np.ones_like(inner_mask)
-            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-                eroded &= np.roll(np.roll(inner_mask, dy, axis=0), dx, axis=1)
-            inner_mask = eroded
-        inner_10 = mask & ~inner_mask  # 境界から10px
-
-        deeper_mask = inner_mask.copy()
-        for _ in range(15):
-            eroded = np.ones_like(deeper_mask)
-            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-                eroded &= np.roll(np.roll(deeper_mask, dy, axis=0), dx, axis=1)
-            deeper_mask = eroded
-        stitch_band = inner_mask & ~deeper_mask  # 10〜25px内側のバンド
-
-        if np.any(stitch_band):
-            # ステッチバンド内で水平・垂直方向の勾配を計算
-            grad_x = np.zeros_like(gray)
-            grad_y = np.zeros_like(gray)
-            grad_x[:, 1:-1] = gray[:, 2:] - gray[:, :-2]
-            grad_y[1:-1, :] = gray[2:, :] - gray[:-2, :]
-            grad_mag = np.sqrt(grad_x**2 + grad_y**2)
-
-            band_grad = grad_mag[stitch_band]
-
-            # ステッチライン = バンド内に強い勾配が線状に並んでいる
-            # 強い勾配ピクセルの割合（ステッチは周囲との明暗差が大きい）
-            threshold = np.percentile(band_grad, 80)
-            strong_pixels = band_grad > threshold
-
-            # ステッチがある商品: 強い勾配ピクセルが帯状に連続する
-            # → 行ごと（or列ごと）に強勾配ピクセルが並んでるかチェック
-            band_rows = np.argwhere(stitch_band)
-            if len(band_rows) > 0:
-                # ステッチバンド内の行ごとの強勾配連続度
-                row_runs = {}
-                for (ry, rx) in band_rows:
-                    if grad_mag[ry, rx] > threshold:
-                        row_runs.setdefault(ry, []).append(rx)
-
-                # 連続する強勾配ピクセルが5個以上続く行 = ステッチライン候補
-                stitch_line_count = 0
-                for ry, xs in row_runs.items():
-                    if len(xs) < 5:
-                        continue
-                    xs_sorted = sorted(xs)
-                    run_len = 1
-                    max_run = 1
-                    for i in range(1, len(xs_sorted)):
-                        if xs_sorted[i] - xs_sorted[i-1] <= 2:  # 2px以内のギャップは許容
-                            run_len += 1
-                            max_run = max(max_run, run_len)
-                        else:
-                            run_len = 1
-                    if max_run >= 5:
-                        stitch_line_count += 1
-
-                # 同様に列方向もチェック（縦のステッチ）
-                col_runs = {}
-                for (ry, rx) in band_rows:
-                    if grad_mag[ry, rx] > threshold:
-                        col_runs.setdefault(rx, []).append(ry)
-
-                for rx, ys in col_runs.items():
-                    if len(ys) < 5:
-                        continue
-                    ys_sorted = sorted(ys)
-                    run_len = 1
-                    max_run = 1
-                    for i in range(1, len(ys_sorted)):
-                        if ys_sorted[i] - ys_sorted[i-1] <= 2:
-                            run_len += 1
-                            max_run = max(max_run, run_len)
-                        else:
-                            run_len = 1
-                    if max_run >= 5:
-                        stitch_line_count += 1
-
-                # ステッチラインが一定数以上 → 縫製あり商品
-                min_lines = max(3, min(h, w) // 80)
-                if stitch_line_count >= min_lines:
-                    has_stitching = True
-
-    # --- 色特性判別 ---
     if avg_brightness < 80:
         return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "暗色系商品（黒・ダークグレーなど）", "has_stitching": has_stitching}
+                "description": "暗色系商品（黒・ダークグレーなど）"}
     elif avg_brightness < 140 and avg_saturation < 25:
         return {"type": "dark", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "暗めの無彩色商品", "has_stitching": has_stitching}
+                "description": "暗めの無彩色商品"}
     elif avg_brightness > 200:
         return {"type": "light", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "明色系商品（白・ベージュなど）", "has_stitching": has_stitching}
+                "description": "明色系商品（白・ベージュなど）"}
     elif avg_saturation > 50:
         return {"type": "colorful", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "カラフルな商品", "has_stitching": has_stitching}
+                "description": "カラフルな商品"}
     else:
         return {"type": "neutral", "avg_brightness": avg_brightness, "avg_saturation": avg_saturation,
-                "description": "中間色の商品", "has_stitching": has_stitching}
+                "description": "中間色の商品"}
 
 
 @dataclass
@@ -1191,9 +1095,10 @@ def _create_annotated_image(image: Image.Image, bbox: tuple) -> Image.Image:
     return padded
 
 
-def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckReport:
+def check_image(image: Image.Image, filename: str = "image.jpg", check_stitching: bool = False) -> ImageCheckReport:
     """
     画像の全チェックを実行して結果をまとめる
+    check_stitching: True の場合、縫製チェックを実行する（革・布製品向け）
     """
     results = []
 
@@ -1242,7 +1147,7 @@ def check_image(image: Image.Image, filename: str = "image.jpg") -> ImageCheckRe
     results.append(check_lighting_direction(image, mask, bbox))
 
     # 14. 縫製の仕上がり（革・布素材の商品のみ）
-    if product_type.get("has_stitching", False):
+    if check_stitching:
         results.append(check_stitching_quality(image, mask))
 
     # bbox赤枠付き画像
