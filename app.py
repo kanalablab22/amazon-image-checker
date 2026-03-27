@@ -573,9 +573,17 @@ if target_keyword.strip():
                     .s-main-slot > div:not([data-component-type="s-search-result"]) {
                         width:100% !important; flex:0 0 100% !important;
                     }
-                    /* 追加: Amazon内部グリッドの3列化を防止 */
-                    .s-result-item { width:50% !important; }
-                    .sg-col-inner { padding:4px !important; }
+                    /* スポンサー広告枠も2列に強制 */
+                    [data-component-type="sp-sponsored-result"] .sg-row,
+                    [data-component-type="sp-sponsored-result"] [class*="sg-col"],
+                    .AdHolder .sg-row,
+                    [class*="sponsored"] .sg-row {
+                        display:flex !important; flex-wrap:wrap !important;
+                    }
+                    [data-component-type="sp-sponsored-result"] .sg-col-inner,
+                    .AdHolder .sg-col-inner {
+                        width:50% !important; flex:0 0 50% !important;
+                    }
                 </style>
                 """
                 amazon_html_sp = amazon_html_sp.replace('</head>', sp_css + '</head>')
