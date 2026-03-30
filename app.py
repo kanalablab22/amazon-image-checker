@@ -335,6 +335,14 @@ with st.sidebar:
 st.markdown("# 🔍 Amazon商品画像チェッカー")
 st.markdown("作成した商品画像をアップロードすると、Amazonガイドラインに基づいて自動チェックします")
 
+st.info(
+    "**📖 使い方ガイド**\n"
+    "1. 左に画像をアップ、右にキーワードを入力（順番は自由！）\n"
+    "2. 自動で白背景・明るさ・構図をチェック → 100点満点でスコア表示\n"
+    "3. 検索結果プレビューで競合商品の中での見え方も確認できます",
+    icon="💡",
+)
+
 with st.expander("📌 **画像の技術的要件（Amazon公式）**", expanded=False):
     col1, col2 = st.columns(2)
     with col1:
